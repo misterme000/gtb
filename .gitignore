@@ -39,3 +39,5 @@ grafana-data/
 # Project specific
 /data/
 logs/*
+
+grid_trading_bot

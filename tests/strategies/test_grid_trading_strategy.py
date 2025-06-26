@@ -460,16 +460,114 @@ class TestGridTradingStrategy:
     async def test_on_ticker_update_error_handling(self, setup_strategy):
         create_strategy, _, exchange_service, grid_manager, order_manager, balance_tracker, _, _, _ = setup_strategy
         strategy = create_strategy(TradingMode.LIVE)
-        
+
         grid_manager.get_trigger_price.return_value = 15000
         balance_tracker.get_total_balance_value.side_effect = Exception("Balance calculation error")
-        
+
         async def simulate_ticker_update():
             callback = exchange_service.listen_to_ticker_updates.call_args[0][1]
             await callback(15100)
-        
+
         exchange_service.listen_to_ticker_updates = AsyncMock(side_effect=simulate_ticker_update)
-        
+
         await strategy.run()
-        
+
         exchange_service.listen_to_ticker_updates.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_backtest_with_real_historical_data(self, setup_strategy):
+        """Test that backtest runs with actual historical data and produces meaningful results."""
+        create_strategy, config_manager, exchange_service, grid_manager, order_manager, balance_tracker, trading_performance_analyzer, _, _ = setup_strategy
+
+        # Configure for backtest mode with real data
+        config_manager.get_timeframe.return_value = "1h"
+        config_manager.get_start_date.return_value = "2024-06-10T00:00:00Z"
+        config_manager.get_end_date.return_value = "2024-06-12T23:59:59Z"
+
+        # Create realistic historical data (simulating what would come from the CSV file)
+        # Include a price drop to trigger grid initialization
+        historical_data = pd.DataFrame({
+            'open': [67500.0, 67086.4, 67223.2, 67329.1, 67452.0],
+            'high': [67600.0, 67265.4, 67420.3, 67464.7, 67597.5],
+            'low': [66900.0, 67000.4, 67156.4, 67222.1, 67357.5],
+            'close': [67086.4, 67223.2, 67329.1, 67452.0, 67484.3],
+            'volume': [2745, 3293, 2112, 3826, 3082]
+        }, index=pd.date_range(start='2024-06-10 00:00:00', periods=5, freq='h'))
+
+        exchange_service.fetch_ohlcv.return_value = historical_data
+
+        # Setup grid manager and order manager for realistic backtest
+        # Set trigger price higher than the first close price to ensure grid initialization
+        grid_manager.get_trigger_price.return_value = 67200.0
+        grid_manager.initialize_grids_and_levels = Mock()
+        order_manager.simulate_order_fills = AsyncMock()
+        order_manager.initialize_grid_orders = AsyncMock()
+        order_manager.perform_initial_purchase = AsyncMock()
+
+        # Setup balance tracker to return realistic values
+        balance_tracker.get_total_balance_value.side_effect = [10000, 10050, 10100, 10150, 10200, 10250, 10300]
+        balance_tracker.crypto_balance = 0.15  # Realistic BTC balance
+        balance_tracker.get_adjusted_fiat_balance.return_value = 5000
+        balance_tracker.get_adjusted_crypto_balance.return_value = 0.15
+        balance_tracker.total_fees = 25.5
+
+        # Setup performance analyzer
+        trading_performance_analyzer.generate_performance_summary.return_value = (
+            {
+                'total_return': 2.0,
+                'total_trades': 8,
+                'win_rate': 0.75,
+                'max_drawdown': -1.5
+            },
+            [['Order 1', 'BUY', 67200.0, 0.1], ['Order 2', 'SELL', 67400.0, 0.1]]
+        )
+
+        strategy = create_strategy(TradingMode.BACKTEST)
+
+        # Mock the private methods that would be called during backtest
+        strategy._handle_take_profit_stop_loss = AsyncMock(side_effect=[False, False, False, False, False])
+
+        # Run the backtest
+        await strategy.run()
+
+        # Verify that historical data was fetched
+        exchange_service.fetch_ohlcv.assert_called_once_with(
+            "BTC/USDT", "1h", "2024-06-10T00:00:00Z", "2024-06-12T23:59:59Z"
+        )
+
+        # Verify that the strategy processed the data
+        assert strategy.data is not None
+        assert len(strategy.data) == 5
+        assert 'account_value' in strategy.data.columns
+
+        # Verify that order fills were simulated (should be called for each data point after initialization)
+        assert order_manager.simulate_order_fills.call_count >= 1
+
+        # Verify that account values were tracked
+        actual_account_values = strategy.data['account_value'].dropna().tolist()
+        # Should have at least some account values tracked
+        assert len(actual_account_values) >= 1
+        # All account values should be positive and reasonable
+        assert all(val > 0 for val in actual_account_values)
+        assert all(val < 1000000 for val in actual_account_values)
+
+        # Test performance report generation
+        performance_report, formatted_orders = strategy.generate_performance_report()
+
+        # Verify performance analyzer was called with correct parameters
+        trading_performance_analyzer.generate_performance_summary.assert_called_once()
+        call_args = trading_performance_analyzer.generate_performance_summary.call_args[0]
+
+        # Verify the data passed to performance analyzer
+        assert isinstance(call_args[0], pd.DataFrame)  # strategy.data
+        assert call_args[1] == 67086.4  # initial_price
+        assert call_args[2] == 5000  # fiat_balance
+        assert call_args[3] == 0.15  # crypto_balance
+        assert call_args[4] == 67484.3  # final_price
+        assert call_args[5] == 25.5  # total_fees
+
+        # Verify performance report contains expected metrics
+        assert performance_report['total_return'] == 2.0
+        assert performance_report['total_trades'] == 8
+        assert performance_report['win_rate'] == 0.75
+        assert performance_report['max_drawdown'] == -1.5

@@ -1,5 +1,5 @@
 import cProfile, asyncio, os, logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 from utils.arg_parser import parse_and_validate_console_args
 from utils.performance_results_saver import save_or_append_performance_results
@@ -24,9 +24,36 @@ def initialize_config(config_path: str) -> ConfigManager:
         logging.error(f"An error occured during the initialization of ConfigManager {e}")
         exit(1)
 
+def parse_notification_urls() -> List[str]:
+    """Parse and validate notification URLs from environment variable."""
+    env_var = os.getenv("APPRISE_NOTIFICATION_URLS", "")
+    if not env_var.strip():
+        logging.info("No notification URLs configured in APPRISE_NOTIFICATION_URLS")
+        return []
+
+    urls = [url.strip() for url in env_var.split(",") if url.strip()]
+    if urls:
+        logging.info(f"Loaded {len(urls)} notification URL(s)")
+        for i, url in enumerate(urls, 1):
+            # Log URL type without exposing sensitive tokens
+            if url.startswith("tgram://"):
+                logging.info(f"  URL {i}: Telegram notification")
+            elif url.startswith("discord://"):
+                logging.info(f"  URL {i}: Discord notification")
+            else:
+                logging.info(f"  URL {i}: {url.split('://')[0]} notification")
+    else:
+        logging.warning("APPRISE_NOTIFICATION_URLS is set but contains no valid URLs")
+
+    return urls
+
 def initialize_notification_handler(config_manager: ConfigManager, event_bus: EventBus) -> NotificationHandler:
-    notification_urls = os.getenv("APPRISE_NOTIFICATION_URLS", "").split(",")
+    notification_urls = parse_notification_urls()
     trading_mode = config_manager.get_trading_mode()
+
+    if notification_urls and trading_mode == TradingMode.BACKTEST:
+        logging.warning("Notifications are disabled in backtest mode. Use 'live' or 'paper_trading' mode to enable notifications.")
+
     return NotificationHandler(event_bus, notification_urls, trading_mode)
 
 async def run_bot(

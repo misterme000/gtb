@@ -25,7 +25,7 @@ class NotificationSystem:
     
     @staticmethod
     def create_toast_container():
-        """Create a container for toast notifications."""
+        """Create an enhanced container for toast notifications."""
         return html.Div(
             id="toast-container",
             children=[],
@@ -34,8 +34,35 @@ class NotificationSystem:
                 "top": "20px",
                 "right": "20px",
                 "z-index": "9999",
-                "max-width": "400px"
+                "max-width": "400px",
+                "min-width": "300px"
             }
+        )
+
+    @staticmethod
+    def create_progress_toast(message: str, progress: int = 0, show_progress: bool = True):
+        """Create a progress toast notification."""
+        return dbc.Toast([
+            dbc.ToastHeader([
+                html.I(className="fas fa-spinner fa-spin me-2"),
+                html.Strong("Processing...", className="me-auto"),
+                html.Small(f"{progress}%" if show_progress else "", className="text-muted")
+            ]),
+            dbc.ToastBody([
+                html.P(message, className="mb-2"),
+                dbc.Progress(
+                    value=progress,
+                    striped=True,
+                    animated=True,
+                    color="primary",
+                    className="mb-0"
+                ) if show_progress else None
+            ])
+        ],
+        is_open=True,
+        dismissible=False,
+        duration=0,  # Don't auto-dismiss
+        style={"min-width": "300px"}
         )
     
     @staticmethod
@@ -345,3 +372,82 @@ class NotificationSystem:
 
 # Global notification system instance
 notification_system = NotificationSystem()
+
+# Additional enhanced notification methods
+def create_step_indicator(steps: List[str], current_step: int = 0):
+    """Create a step indicator for multi-step processes."""
+    step_items = []
+
+    for i, step in enumerate(steps):
+        is_current = i == current_step
+        is_completed = i < current_step
+
+        # Determine step status
+        if is_completed:
+            icon = "fas fa-check"
+            color = "success"
+        elif is_current:
+            icon = "fas fa-circle"
+            color = "primary"
+        else:
+            icon = "far fa-circle"
+            color = "secondary"
+
+        step_items.append(
+            html.Div([
+                html.Div([
+                    html.I(className=icon)
+                ], className=f"rounded-circle bg-{color} text-white d-flex align-items-center justify-content-center",
+                   style={"width": "32px", "height": "32px", "fontSize": "14px"}),
+                html.Span(step, className=f"text-{color} fw-{'bold' if is_current else 'normal'} small mt-1")
+            ], className="d-flex flex-column align-items-center text-center")
+        )
+
+        # Add connector line (except for last step)
+        if i < len(steps) - 1:
+            step_items.append(
+                html.Div(
+                    className=f"flex-grow-1 border-top border-2 border-{color if is_completed else 'secondary'}",
+                    style={"height": "2px", "margin": "16px 8px 0 8px"}
+                )
+            )
+
+    return html.Div(
+        step_items,
+        className="d-flex align-items-start justify-content-between w-100 mb-4"
+    )
+
+def create_enhanced_loading_overlay(content, is_loading: bool = True,
+                                  loading_text: str = "Loading...",
+                                  spinner_size: str = "md"):
+    """Create an enhanced loading overlay with better animations."""
+    if not is_loading:
+        return content
+
+    spinner_classes = {
+        "sm": "spinner-border-sm",
+        "md": "",
+        "lg": "spinner-border spinner-border-lg"
+    }
+
+    overlay = html.Div([
+        html.Div([
+            html.Div([
+                html.Div(className=f"spinner-border text-primary {spinner_classes.get(spinner_size, '')}"),
+                html.P(loading_text, className="mt-3 mb-0 text-muted")
+            ], className="text-center")
+        ], className="d-flex align-items-center justify-content-center h-100 bg-white bg-opacity-90")
+    ], style={
+        "position": "absolute",
+        "top": "0",
+        "left": "0",
+        "right": "0",
+        "bottom": "0",
+        "z-index": "1000",
+        "border-radius": "0.5rem"
+    })
+
+    return html.Div([
+        content,
+        overlay
+    ], style={"position": "relative", "min-height": "200px"})

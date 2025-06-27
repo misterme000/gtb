@@ -1,56 +1,170 @@
 /* Grid Trading Bot UI Custom Styles */
 
+/* Import modern fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* CSS Variables for consistent theming */
+:root {
+    --primary-color: #2563eb;
+    --primary-hover: #1d4ed8;
+    --secondary-color: #64748b;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --background-color: #f8fafc;
+    --surface-color: #ffffff;
+    --border-color: #e2e8f0;
+    --text-primary: #1e293b;
+    --text-secondary: #64748b;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+}
+
 /* Main layout */
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f8f9fa;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-primary);
+    line-height: 1.6;
 }
 
 .container-fluid {
     max-width: 1400px;
+    padding: 0 1.5rem;
 }
 
 /* Header styles */
 .border-bottom {
-    border-color: #dee2e6 !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Enhanced header */
+.app-header {
+    background: linear-gradient(135deg, var(--primary-color) 0%, #3b82f6 100%);
+    color: white;
+    padding: 2rem 0;
+    margin-bottom: 2rem;
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+.app-header h1 {
+    font-weight: 700;
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.app-header p {
+    font-size: 1.125rem;
+    opacity: 0.9;
 }
 
 /* Card styles */
 .card {
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-    border: 1px solid rgba(0, 0, 0, 0.125);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    background-color: var(--surface-color);
+    transition: all 0.2s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-1px);
 }
 
 .card-header {
-    background-color: #f8f9fa;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    background-color: var(--surface-color);
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
-/* Form styles */
+/* Enhanced Form styles */
 .form-label {
     font-weight: 600;
-    color: #495057;
-    margin-bottom: 0.25rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
 }
 
 .form-control, .form-select {
-    border-radius: 0.375rem;
-    border: 1px solid #ced4da;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--border-color);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    transition: all 0.2s ease-in-out;
+    background-color: var(--surface-color);
 }
 
 .form-control:focus, .form-select:focus {
-    border-color: #86b7fe;
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    outline: none;
 }
 
-/* Button styles */
+.form-control:hover, .form-select:hover {
+    border-color: var(--primary-hover);
+}
+
+/* Enhanced Button styles */
 .btn {
-    border-radius: 0.375rem;
+    border-radius: var(--radius-sm);
     font-weight: 500;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.875rem;
+    transition: all 0.2s ease-in-out;
+    border: none;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: var(--primary-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-success {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #059669;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.btn-outline-primary {
+    border: 2px solid var(--primary-color);
+    color: var(--primary-color);
+    background-color: transparent;
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--primary-color);
+    color: white;
+    transform: translateY(-1px);
 }
 
 .btn-group .btn {
-    border-radius: 0.375rem;
+    border-radius: var(--radius-sm);
+    margin-right: 0.25rem;
+}
+
+.btn-group .btn:last-child {
+    margin-right: 0;
 }
 
 /* Grid visualization styles */
@@ -196,7 +310,280 @@ h6.text-primary {
 }
 
 .config-section:not(:last-child) {
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Enhanced Interactive Elements */
+.interactive-grid-container {
+    background: var(--surface-color);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-md);
+    margin-bottom: 2rem;
+}
+
+.grid-level-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(90deg, #f8fafc 0%, #e2e8f0 100%);
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.5rem;
+    border-left: 4px solid var(--primary-color);
+    transition: all 0.2s ease-in-out;
+}
+
+.grid-level-indicator:hover {
+    background: linear-gradient(90deg, #e2e8f0 0%, #cbd5e1 100%);
+    transform: translateX(4px);
+}
+
+.price-input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.price-input-group::before {
+    content: '$';
+    position: absolute;
+    left: 1rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    z-index: 10;
+}
+
+.price-input-group input {
+    padding-left: 2rem;
+}
+
+/* Progress indicators */
+.progress-ring {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: conic-gradient(var(--primary-color) 0deg, var(--border-color) 0deg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+.progress-ring::before {
+    content: '';
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background: var(--surface-color);
+    position: absolute;
+}
+
+.progress-text {
+    position: relative;
+    z-index: 10;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+/* Enhanced metrics cards */
+.metric-card-enhanced {
+    background: linear-gradient(135deg, var(--surface-color) 0%, #f8fafc 100%);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.3s ease-in-out;
+    position: relative;
+    overflow: hidden;
+}
+
+.metric-card-enhanced::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+}
+
+.metric-card-enhanced:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-color);
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.metric-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 500;
+}
+
+/* Enhanced Configuration Styles */
+.config-section-header {
+    transition: all 0.3s ease-in-out;
+}
+
+.config-section-header:hover {
+    transform: translateX(4px);
+    box-shadow: var(--shadow-md);
+}
+
+.strategy-card {
+    transition: all 0.3s ease-in-out;
+    cursor: pointer;
+}
+
+.strategy-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+}
+
+.strategy-card.selected {
+    border-color: var(--primary-color) !important;
+    background-color: rgba(37, 99, 235, 0.05);
+}
+
+/* Popular pair buttons */
+.pair-button {
+    transition: all 0.2s ease-in-out;
+}
+
+.pair-button:hover {
+    transform: scale(1.05);
+}
+
+.pair-button.selected {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+/* Risk level indicators */
+.risk-indicator {
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    transition: all 0.3s ease-in-out;
+}
+
+.risk-low {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.risk-medium {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+
+.risk-high {
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: white;
+}
+
+/* Grid preview styles */
+.grid-level {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    margin-bottom: 0.25rem;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(90deg, #f8fafc 0%, #e2e8f0 100%);
+    border-left: 3px solid var(--primary-color);
+    font-family: monospace;
+    font-size: 0.875rem;
+}
+
+.grid-level:nth-child(even) {
+    border-left-color: var(--success-color);
+}
+
+.grid-level-buy {
+    border-left-color: var(--success-color);
+}
+
+.grid-level-sell {
+    border-left-color: var(--danger-color);
+}
+
+/* Configuration wizard styles */
+.config-wizard-step {
+    opacity: 0.6;
+    transition: all 0.3s ease-in-out;
+}
+
+.config-wizard-step.active {
+    opacity: 1;
+    transform: scale(1.02);
+}
+
+.config-wizard-step.completed {
+    opacity: 0.8;
+}
+
+/* Enhanced switches and checkboxes */
+.form-switch .form-check-input {
+    width: 3rem;
+    height: 1.5rem;
+    border-radius: 1rem;
+}
+
+.form-switch .form-check-input:checked {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* Collapsible sections */
+.collapse-section {
+    transition: all 0.3s ease-in-out;
+}
+
+/* Quick action buttons */
+.quick-action-btn {
+    transition: all 0.2s ease-in-out;
+    border-radius: var(--radius-md);
+}
+
+.quick-action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --background-color: #0f172a;
+        --surface-color: #1e293b;
+        --border-color: #334155;
+        --text-primary: #f1f5f9;
+        --text-secondary: #94a3b8;
+    }
+
+    body {
+        background-color: var(--background-color);
+        color: var(--text-primary);
+    }
+
+    .config-section-header {
+        background-color: var(--surface-color) !important;
+        border-color: var(--primary-color) !important;
+    }
+
+    .grid-level {
+        background: linear-gradient(90deg, var(--surface-color) 0%, #334155 100%);
+    }
 }
 
 /* Grid level indicators */

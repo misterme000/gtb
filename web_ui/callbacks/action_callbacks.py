@@ -202,7 +202,38 @@ class ActionCallbacks:
                     return f"❌ Export error: {str(e)}", "danger", True, False, False, False, toasts
 
             return "", "info", False, False, False, False, toasts
-        
+
+        @self.app.callback(
+            [Output('current-price-display', 'children'),
+             Output('status-alert', 'children', allow_duplicate=True),
+             Output('status-alert', 'color', allow_duplicate=True),
+             Output('status-alert', 'is_open', allow_duplicate=True)],
+            [Input('get-price-btn', 'n_clicks')],
+            [State('base-currency-input', 'value'),
+             State('quote-currency-input', 'value'),
+             State('exchange-select', 'value')],
+            prevent_initial_call=True
+        )
+        def get_current_price(n_clicks, base_currency, quote_currency, exchange):
+            """Get and display current price for the selected trading pair."""
+            if not n_clicks or not base_currency or not quote_currency or not exchange:
+                return dash.no_update, "", "info", False
+
+            try:
+                # Get current price
+                current_price = price_service.get_current_price_sync(exchange, base_currency, quote_currency)
+
+                if current_price:
+                    price_display = f"${current_price:,.2f}"
+                    message = f"✅ Current price fetched: ${current_price:,.2f} for {base_currency}/{quote_currency}"
+                    return price_display, message, "success", True
+                else:
+                    return dash.no_update, "❌ Unable to fetch current price", "danger", True
+
+            except Exception as e:
+                logger.error(f"Error fetching current price: {e}")
+                return dash.no_update, f"❌ Error: {str(e)}", "danger", True
+
         @self.app.callback(
             [Output('bottom-price-input', 'value'),
              Output('top-price-input', 'value'),
@@ -235,6 +266,89 @@ class ActionCallbacks:
             except Exception as e:
                 logger.error(f"Error suggesting price range: {e}")
                 return dash.no_update, dash.no_update, f"Error: {str(e)}", "danger", True
+
+        # Popular pair selection callbacks
+        @self.app.callback(
+            [Output('base-currency-input', 'value'),
+             Output('quote-currency-input', 'value')],
+            [Input('pair-btn-BTC-USDT', 'n_clicks'),
+             Input('pair-btn-ETH-USDT', 'n_clicks'),
+             Input('pair-btn-BTC-USD', 'n_clicks'),
+             Input('pair-btn-ETH-BTC', 'n_clicks'),
+             Input('pair-btn-ADA-USDT', 'n_clicks'),
+             Input('pair-btn-DOT-USDT', 'n_clicks')],
+            prevent_initial_call=True
+        )
+        def select_popular_pair(*n_clicks_list):
+            """Handle popular pair button clicks."""
+            if not any(n_clicks_list):
+                return dash.no_update, dash.no_update
+
+            # Determine which button was clicked
+            ctx_triggered = ctx.triggered[0] if ctx.triggered else None
+            if not ctx_triggered:
+                return dash.no_update, dash.no_update
+
+            button_id = ctx_triggered['prop_id'].split('.')[0]
+
+            # Map button IDs to currency pairs
+            pair_mapping = {
+                'pair-btn-BTC-USDT': ('BTC', 'USDT'),
+                'pair-btn-ETH-USDT': ('ETH', 'USDT'),
+                'pair-btn-BTC-USD': ('BTC', 'USD'),
+                'pair-btn-ETH-BTC': ('ETH', 'BTC'),
+                'pair-btn-ADA-USDT': ('ADA', 'USDT'),
+                'pair-btn-DOT-USDT': ('DOT', 'USDT')
+            }
+
+            if button_id in pair_mapping:
+                base, quote = pair_mapping[button_id]
+                return base, quote
+
+            return dash.no_update, dash.no_update
+
+        # Quick date selection callbacks
+        @self.app.callback(
+            [Output('start-date-input', 'value'),
+             Output('end-date-input', 'value')],
+            [Input('date-7d', 'n_clicks'),
+             Input('date-30d', 'n_clicks'),
+             Input('date-3m', 'n_clicks'),
+             Input('date-1y', 'n_clicks')],
+            prevent_initial_call=True
+        )
+        def select_quick_date_range(*n_clicks_list):
+            """Handle quick date range button clicks."""
+            if not any(n_clicks_list):
+                return dash.no_update, dash.no_update
+
+            # Determine which button was clicked
+            ctx_triggered = ctx.triggered[0] if ctx.triggered else None
+            if not ctx_triggered:
+                return dash.no_update, dash.no_update
+
+            button_id = ctx_triggered['prop_id'].split('.')[0]
+
+            from datetime import datetime, timedelta
+            end_date = datetime.now()
+
+            # Calculate start date based on button clicked
+            if button_id == 'date-7d':
+                start_date = end_date - timedelta(days=7)
+            elif button_id == 'date-30d':
+                start_date = end_date - timedelta(days=30)
+            elif button_id == 'date-3m':
+                start_date = end_date - timedelta(days=90)
+            elif button_id == 'date-1y':
+                start_date = end_date - timedelta(days=365)
+            else:
+                return dash.no_update, dash.no_update
+
+            # Format dates for datetime-local input
+            start_str = start_date.strftime('%Y-%m-%dT%H:%M')
+            end_str = end_date.strftime('%Y-%m-%dT%H:%M')
+
+            return start_str, end_str
 
         # Real-time field validation callbacks
         @self.app.callback(

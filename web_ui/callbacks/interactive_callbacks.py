@@ -172,66 +172,67 @@ class InteractiveCallbacks:
                 error_fig.update_layout(height=400)
                 return error_fig, f"Error: {str(e)}"
         
-        @self.app.callback(
-            [Output('current-price-display', 'children'),
-             Output('grid-level-indicators', 'children')],
-            [Input('price-update-interval', 'n_intervals')],
-            [State('config-store', 'data'),
-             State('market-data-store', 'data')],
-            prevent_initial_call=True
-        )
-        def update_real_time_price_display(n_intervals, config_data, market_data):
-            """Update real-time price display and grid level indicators."""
-            try:
-                if not config_data:
-                    return "No configuration", []
-                
-                # Extract configuration
-                exchange_name = config_data["exchange"]["name"]
-                base_currency = config_data["pair"]["base_currency"]
-                quote_currency = config_data["pair"]["quote_currency"]
-                
-                # Get current price
-                current_price = None
-                if market_data and 'data' in market_data and market_data['data']:
-                    latest_data = market_data['data'][-1]
-                    current_price = latest_data.get('close', None)
-                
-                # If no market data, try to fetch current price
-                if not current_price:
-                    try:
-                        current_price = price_service.get_current_price_sync(
-                            exchange_name, base_currency, quote_currency
-                        )
-                    except Exception as e:
-                        logger.warning(f"Failed to fetch current price: {e}")
-                
-                # Format price display
-                if current_price:
-                    price_display = f"${current_price:,.2f}"
-                else:
-                    price_display = "Loading..."
-                
-                # Generate grid levels and indicators
-                grid_config = config_data.get("grid_strategy", {})
-                num_grids = grid_config.get("num_grids", 10)
-                bottom_price = grid_config.get("bottom_price", 100)
-                top_price = grid_config.get("top_price", 200)
-                spacing_type = grid_config.get("spacing_type", "arithmetic")
-                
-                grid_levels = interactive_grid._generate_grid_levels(
-                    num_grids, bottom_price, top_price, spacing_type
-                )
-                
-                indicators = interactive_grid._create_grid_level_indicators(
-                    grid_levels, current_price
-                )
-                
-                return price_display, indicators
-                
-            except Exception as e:
-                logger.error(f"Error updating real-time price display: {e}")
-                return "Error", [html.Div(f"Error: {str(e)}", className="text-danger")]
+        # Temporarily disabled - grid-level-indicators only exists in interactive tab
+        # @self.app.callback(
+        #     [Output('current-price-display', 'children'),
+        #      Output('grid-level-indicators', 'children')],
+        #     [Input('price-update-interval', 'n_intervals')],
+        #     [State('config-store', 'data'),
+        #      State('market-data-store', 'data')],
+        #     prevent_initial_call=True
+        # )
+        # def update_real_time_price_display(n_intervals, config_data, market_data):
+        #     """Update real-time price display and grid level indicators."""
+        #     try:
+        #         if not config_data:
+        #             return "No configuration", []
+        #
+        #         # Extract configuration
+        #         exchange_name = config_data["exchange"]["name"]
+        #         base_currency = config_data["pair"]["base_currency"]
+        #         quote_currency = config_data["pair"]["quote_currency"]
+        #
+        #         # Get current price
+        #         current_price = None
+        #         if market_data and 'data' in market_data and market_data['data']:
+        #             latest_data = market_data['data'][-1]
+        #             current_price = latest_data.get('close', None)
+        #
+        #         # If no market data, try to fetch current price
+        #         if not current_price:
+        #             try:
+        #                 current_price = price_service.get_current_price_sync(
+        #                     exchange_name, base_currency, quote_currency
+        #                 )
+        #             except Exception as e:
+        #                 logger.warning(f"Failed to fetch current price: {e}")
+        #
+        #         # Format price display
+        #         if current_price:
+        #             price_display = f"${current_price:,.2f}"
+        #         else:
+        #             price_display = "Loading..."
+        #
+        #         # Generate grid levels and indicators
+        #         grid_config = config_data.get("grid_strategy", {})
+        #         num_grids = grid_config.get("num_grids", 10)
+        #         bottom_price = grid_config.get("bottom_price", 100)
+        #         top_price = grid_config.get("top_price", 200)
+        #         spacing_type = grid_config.get("spacing_type", "arithmetic")
+        #
+        #         grid_levels = interactive_grid._generate_grid_levels(
+        #             num_grids, bottom_price, top_price, spacing_type
+        #         )
+        #
+        #         indicators = interactive_grid._create_grid_level_indicators(
+        #             grid_levels, current_price
+        #         )
+        #
+        #         return price_display, indicators
+        #
+        #     except Exception as e:
+        #         logger.error(f"Error updating real-time price display: {e}")
+        #         return "Error", [html.Div(f"Error: {str(e)}", className="text-danger")]
         
         @self.app.callback(
             Output('config-store', 'data', allow_duplicate=True),

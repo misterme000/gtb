@@ -7,6 +7,7 @@ Contains all layout-related functions for creating the UI structure.
 import dash_bootstrap_components as dbc
 from dash import html, dcc
 from typing import Dict, Any
+from web_ui.components.help_system import help_system
 
 
 class LayoutComponents:
@@ -83,22 +84,25 @@ class LayoutComponents:
                 ], className="mb-0")
             ]),
             dbc.CardBody([
+                # Quick Start Guide
+                help_system.create_quick_start_guide(),
+
                 # Exchange Configuration
                 config_forms.create_exchange_config(),
                 html.Hr(),
-                
+
                 # Trading Pair Configuration
                 config_forms.create_pair_config(),
                 html.Hr(),
-                
+
                 # Grid Strategy Configuration
                 config_forms.create_grid_config(),
                 html.Hr(),
-                
+
                 # Risk Management Configuration
                 config_forms.create_risk_config(),
                 html.Hr(),
-                
+
                 # Trading Settings Configuration
                 config_forms.create_trading_config()
             ])
@@ -174,5 +178,8 @@ class LayoutComponents:
             dcc.Store(id='market-data-store', data={}),
             dcc.Interval(id='price-update-interval', interval=30000, n_intervals=0),  # 30 seconds
             dcc.Interval(id='chart-update-interval', interval=60000, n_intervals=0),  # 1 minute for charts
+
+            # Help system components
+            help_system.create_help_modal()
             
         ], fluid=True, className="px-4")

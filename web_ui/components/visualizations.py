@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any
 from web_ui.price_service import price_service
+from web_ui.services.backtest_service import backtest_service
 
 logger = logging.getLogger(__name__)
 
@@ -227,23 +228,30 @@ class VisualizationComponents:
     
     @staticmethod
     def create_backtest_preview(config_data: Dict[str, Any]):
-        """Create backtest preview."""
+        """Create comprehensive backtest preview with real analysis."""
         try:
-            # Placeholder for backtest preview
-            # This would run a quick backtest simulation
-            
+            # Generate backtest preview
+            preview_data = backtest_service.generate_backtest_preview(config_data)
+
+            if "error" in preview_data:
+                return dbc.Alert(f"Error generating preview: {preview_data['error']}", color="danger")
+
+            performance = preview_data.get("performance_estimate", {})
+            market = preview_data.get("market_analysis", {})
+            recommendations = preview_data.get("recommendations", [])
+
             return dbc.Card([
                 dbc.CardBody([
-                    html.H6("Backtest Preview", className="card-title"),
-                    html.P("This feature will show a preview of how your grid strategy would perform with historical data."),
-                    dbc.Button("Run Full Backtest", color="primary", className="mt-2"),
-                    html.Hr(),
-                    html.H6("Expected Performance Metrics:"),
+                    html.H6("Backtest Preview & Analysis", className="card-title"),
+
+                    # Performance Metrics
+                    html.H6("Expected Performance Metrics:", className="mt-3"),
                     dbc.Row([
                         dbc.Col([
                             dbc.Card([
                                 dbc.CardBody([
-                                    html.H4("12.5%", className="text-success"),
+                                    html.H4(f"{performance.get('estimated_roi', 0)}%",
+                                           className="text-success" if performance.get('estimated_roi', 0) > 0 else "text-danger"),
                                     html.P("Expected ROI", className="mb-0")
                                 ])
                             ])
@@ -251,7 +259,7 @@ class VisualizationComponents:
                         dbc.Col([
                             dbc.Card([
                                 dbc.CardBody([
-                                    html.H4("156", className="text-info"),
+                                    html.H4(f"{performance.get('estimated_trades', 0)}", className="text-info"),
                                     html.P("Estimated Trades", className="mb-0")
                                 ])
                             ])
@@ -259,7 +267,7 @@ class VisualizationComponents:
                         dbc.Col([
                             dbc.Card([
                                 dbc.CardBody([
-                                    html.H4("8.2%", className="text-warning"),
+                                    html.H4(f"{performance.get('max_drawdown', 0)}%", className="text-warning"),
                                     html.P("Max Drawdown", className="mb-0")
                                 ])
                             ])
@@ -267,14 +275,68 @@ class VisualizationComponents:
                         dbc.Col([
                             dbc.Card([
                                 dbc.CardBody([
-                                    html.H4("2.1", className="text-primary"),
+                                    html.H4(f"{performance.get('sharpe_ratio', 0)}", className="text-primary"),
                                     html.P("Sharpe Ratio", className="mb-0")
                                 ])
                             ])
                         ], width=3)
+                    ], className="mb-3"),
+
+                    # Market Analysis
+                    html.H6("Market Analysis:", className="mt-3"),
+                    dbc.Row([
+                        dbc.Col([
+                            html.P([
+                                html.Strong("Current Price: "),
+                                f"${market.get('current_price', 0):,.2f}" if market.get('current_price') else "N/A"
+                            ]),
+                            html.P([
+                                html.Strong("24h Change: "),
+                                f"{market.get('price_change_24h', 0):+.2f}%"
+                            ]),
+                            html.P([
+                                html.Strong("Volatility: "),
+                                f"{market.get('volatility', 0):.2f}%"
+                            ])
+                        ], width=6),
+                        dbc.Col([
+                            html.P([
+                                html.Strong("Grid Coverage: "),
+                                f"{market.get('grid_coverage', 0):.1f}%"
+                            ]),
+                            html.P([
+                                html.Strong("Price in Range: "),
+                                "✅ Yes" if market.get('price_in_range', False) else "❌ No"
+                            ]),
+                            html.P([
+                                html.Strong("Data Points: "),
+                                f"{market.get('data_points', 0)}"
+                            ])
+                        ], width=6)
+                    ], className="mb-3"),
+
+                    # Recommendations
+                    html.H6("Recommendations:", className="mt-3"),
+                    html.Div([
+                        dbc.Alert(rec, color="info", className="mb-2")
+                        for rec in recommendations[:5]  # Limit to 5 recommendations
+                    ]) if recommendations else html.P("No specific recommendations at this time."),
+
+                    # Action Buttons
+                    html.Hr(),
+                    dbc.ButtonGroup([
+                        dbc.Button([
+                            html.I(className="fas fa-play me-2"),
+                            "Run Full Backtest"
+                        ], id="run-full-backtest-btn", color="primary"),
+                        dbc.Button([
+                            html.I(className="fas fa-refresh me-2"),
+                            "Refresh Analysis"
+                        ], id="refresh-analysis-btn", color="outline-secondary")
                     ])
                 ])
             ])
-            
+
         except Exception as e:
+            logger.error(f"Error creating backtest preview: {e}")
             return dbc.Alert(f"Error creating backtest preview: {str(e)}", color="danger")

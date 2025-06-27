@@ -8,6 +8,7 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc
 from typing import Dict, Any
 from utils.constants import TIMEFRAME_MAPPINGS
+from web_ui.components.help_system import help_system
 
 # Supported exchanges
 SUPPORTED_EXCHANGES = [
@@ -28,12 +29,16 @@ class ConfigForms:
         return html.Div([
             html.H6([
                 html.I(className="fas fa-exchange-alt me-2"),
-                "Exchange Settings"
+                "Exchange Settings",
+                help_system.create_help_icon("exchange")
             ], className="text-primary"),
             
             dbc.Row([
                 dbc.Col([
-                    dbc.Label("Exchange", html_for="exchange-select"),
+                    dbc.Label([
+                        "Exchange",
+                        help_system.create_help_icon("exchange", "exchange_name")
+                    ], html_for="exchange-select"),
                     dcc.Dropdown(
                         id="exchange-select",
                         options=[{"label": ex.title(), "value": ex} for ex in SUPPORTED_EXCHANGES],

@@ -252,3 +252,16 @@ class ActionCallbacks:
             except Exception as e:
                 logger.error(f"Export download error: {e}")
                 return ""
+
+        # Help system callbacks
+        @self.app.callback(
+            Output('help-modal', 'is_open'),
+            [Input('open-help-modal', 'n_clicks'),
+             Input('close-help-modal', 'n_clicks')],
+            [State('help-modal', 'is_open')]
+        )
+        def toggle_help_modal(open_clicks, close_clicks, is_open):
+            """Toggle help modal visibility."""
+            if open_clicks or close_clicks:
+                return not is_open
+            return is_open

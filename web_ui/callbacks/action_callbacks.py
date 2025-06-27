@@ -204,7 +204,7 @@ class ActionCallbacks:
             return "", "info", False, False, False, False, toasts
 
         @self.app.callback(
-            [Output('current-price-display', 'children'),
+            [Output('stat-current-price', 'children'),
              Output('status-alert', 'children', allow_duplicate=True),
              Output('status-alert', 'color', allow_duplicate=True),
              Output('status-alert', 'is_open', allow_duplicate=True)],

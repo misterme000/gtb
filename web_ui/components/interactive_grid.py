@@ -32,12 +32,12 @@ class InteractiveGridComponents:
             Interactive grid editor component
         """
         try:
-            # Extract grid configuration
+            # Extract grid configuration with correct key names
             grid_config = config_data.get("grid_strategy", {})
             num_grids = grid_config.get("num_grids", 10)
-            bottom_price = grid_config.get("bottom_price", 100)
-            top_price = grid_config.get("top_price", 200)
-            spacing_type = grid_config.get("spacing_type", "arithmetic")
+            bottom_price = grid_config.get("range", {}).get("bottom", 100)
+            top_price = grid_config.get("range", {}).get("top", 200)
+            spacing_type = grid_config.get("spacing", "arithmetic")
             
             # Generate grid levels
             grid_levels = InteractiveGridComponents._generate_grid_levels(
@@ -237,7 +237,7 @@ class InteractiveGridComponents:
                         html.H2(
                             f"${current_price:,.2f}" if current_price else "Loading...",
                             className="text-primary mb-2",
-                            id="current-price-display"
+                            id="realtime-price-display"
                         ),
                         dbc.Badge(
                             exchange_name.title(),

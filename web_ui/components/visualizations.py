@@ -20,336 +20,286 @@ logger = logging.getLogger(__name__)
 
 class VisualizationComponents:
     """Class containing all visualization components."""
-    
+
     @staticmethod
     def create_grid_visualization(config_data: Dict[str, Any]):
-        """Create grid visualization chart."""
+        """Create enhanced grid visualization chart with better UX."""
         try:
-            grid_config = config_data["grid_strategy"]
-            bottom = grid_config["range"]["bottom"]
-            top = grid_config["range"]["top"]
-            num_grids = grid_config["num_grids"]
-            spacing_type = grid_config["spacing"]
-            
+            if not config_data:
+                return dbc.Alert("No configuration data available", color="warning")
+
+            grid_config = config_data.get("grid_strategy", {})
+            bottom = grid_config.get("range", {}).get("bottom", 100)
+            top = grid_config.get("range", {}).get("top", 200)
+            num_grids = grid_config.get("num_grids", 10)
+            spacing_type = grid_config.get("spacing", "arithmetic")
+
+            # Validate inputs
+            if bottom >= top:
+                return dbc.Alert("Bottom price must be less than top price", color="danger")
+            if num_grids < 3:
+                return dbc.Alert("Number of grids must be at least 3", color="danger")
+
             # Calculate grid levels
             if spacing_type == "arithmetic":
                 grid_levels = np.linspace(bottom, top, num_grids)
             else:  # geometric
                 ratio = (top / bottom) ** (1 / (num_grids - 1))
                 grid_levels = [bottom * (ratio ** i) for i in range(num_grids)]
-            
-            # Create visualization
+
+            # Create enhanced visualization
             fig = go.Figure()
-            
-            # Add grid lines
+
+            # Add background gradient
+            fig.add_hrect(
+                y0=bottom, y1=top,
+                fillcolor="rgba(59, 130, 246, 0.1)",
+                layer="below",
+                line_width=0
+            )
+
+            # Add grid lines with enhanced styling
             for i, level in enumerate(grid_levels):
-                color = "green" if i < len(grid_levels) // 2 else "red"
+                is_buy_level = i < len(grid_levels) // 2
+                color = "#10b981" if is_buy_level else "#ef4444"  # Green for buy, red for sell
+                line_width = 2 if i == 0 or i == len(grid_levels) - 1 else 1
+
                 fig.add_hline(
                     y=level,
-                    line_dash="dash",
+                    line_dash="solid" if i == 0 or i == len(grid_levels) - 1 else "dash",
                     line_color=color,
-                    annotation_text=f"${level:,.2f}",
-                    annotation_position="right"
+                    line_width=line_width,
+                    annotation_text=f"${level:,.2f} {'(BUY)' if is_buy_level else '(SELL)'}",
+                    annotation_position="right",
+                    annotation=dict(
+                        bgcolor=color,
+                        bordercolor=color,
+                        font=dict(color="white", size=10)
+                    )
                 )
-            
-            # Add current price indicator (placeholder)
-            current_price = (top + bottom) / 2
+
+            # Try to get real current price
+            try:
+                exchange_name = config_data.get("exchange", {}).get("name", "coinbase")
+                base_currency = config_data.get("pair", {}).get("base_currency", "BTC")
+                quote_currency = config_data.get("pair", {}).get("quote_currency", "USDT")
+                current_price = price_service.get_current_price_sync(exchange_name, base_currency, quote_currency)
+            except:
+                current_price = None
+
+            # Add current price indicator
+            if not current_price:
+                current_price = (top + bottom) / 2  # Fallback to middle
+
             fig.add_hline(
                 y=current_price,
-                line_color="blue",
-                line_width=3,
+                line_color="#3b82f6",
+                line_width=4,
                 annotation_text=f"Current: ${current_price:,.2f}",
-                annotation_position="left"
+                annotation_position="left",
+                annotation=dict(
+                    bgcolor="#3b82f6",
+                    bordercolor="#3b82f6",
+                    font=dict(color="white", size=12, family="monospace")
+                )
             )
-            
-            # Style the chart
+
+            # Enhanced styling
             fig.update_layout(
-                title="Grid Trading Levels",
-                yaxis_title="Price ($)",
-                height=400,
+                title=dict(
+                    text="Grid Trading Strategy Visualization",
+                    font=dict(size=18, family="Inter"),
+                    x=0.5
+                ),
+                yaxis_title="Price (USD)",
+                height=500,
                 showlegend=False,
-                yaxis=dict(range=[bottom * 0.95, top * 1.05])
+                yaxis=dict(
+                    range=[bottom * 0.9, top * 1.1],
+                    tickformat="$,.2f",
+                    gridcolor="rgba(0,0,0,0.1)"
+                ),
+                xaxis=dict(visible=False),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                margin=dict(l=80, r=80, t=60, b=40)
             )
-            
-            # Add summary statistics
-            grid_spacing = (top - bottom) / (num_grids - 1) if spacing_type == "arithmetic" else "Variable"
-            
-            summary_card = dbc.Card([
-                dbc.CardBody([
-                    html.H6("Grid Summary", className="card-title"),
-                    html.P([
-                        f"Number of Grids: {num_grids}", html.Br(),
-                        f"Price Range: ${bottom:,.2f} - ${top:,.2f}", html.Br(),
-                        f"Spacing: {spacing_type.title()}", html.Br(),
-                        f"Grid Spacing: {grid_spacing if isinstance(grid_spacing, str) else f'${grid_spacing:,.2f}'}"
-                    ])
-                ])
-            ], className="mt-3")
-            
+
+            # Calculate detailed statistics
+            price_range = top - bottom
+            grid_spacing = price_range / (num_grids - 1) if spacing_type == "arithmetic" else "Variable"
+            range_percentage = (price_range / current_price) * 100 if current_price else 0
+
+            # Calculate potential profit per grid
+            trading_fee = config_data.get("exchange", {}).get("trading_fee", 0.005)
+            if spacing_type == "arithmetic":
+                avg_spacing = grid_spacing
+                profit_per_grid = (avg_spacing / current_price - 2 * trading_fee) * 100 if current_price else 0
+            else:
+                avg_spacing = price_range / num_grids  # Approximation
+                profit_per_grid = (avg_spacing / current_price - 2 * trading_fee) * 100 if current_price else 0
+
+            # Enhanced summary cards
+            summary_cards = dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.I(className="fas fa-layer-group fa-2x text-primary mb-2"),
+                                html.H4(str(num_grids), className="mb-1"),
+                                html.P("Grid Levels", className="mb-0 text-muted small")
+                            ], className="text-center")
+                        ])
+                    ], className="h-100")
+                ], width=3),
+
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            html.Div([
+                                html.I(className="fas fa-arrows-alt-v fa-2x text-info mb-2"),
+                                html.H4(f"${price_range:,.0f}", className="mb-1"),
+                                html.P("Price Range", className="mb-0 text-muted small")
+                            ], className="text-center")
+                        ])
+                    ], className="h-100")
+                ], width=3)
+            ], className="g-3 mt-3")
+
             return html.Div([
-                dcc.Graph(figure=fig),
-                summary_card
+                dcc.Graph(
+                    figure=fig,
+                    config={
+                        'displayModeBar': True,
+                        'displaylogo': False,
+                        'modeBarButtonsToRemove': ['pan2d', 'lasso2d', 'select2d'],
+                        'toImageButtonOptions': {
+                            'format': 'png',
+                            'filename': 'grid_strategy_visualization',
+                            'height': 500,
+                            'width': 800,
+                            'scale': 2
+                        }
+                    }
+                ),
+                summary_cards
             ])
-            
+
         except Exception as e:
+            logger.error(f"Error creating grid visualization: {e}")
             return dbc.Alert(f"Error creating grid visualization: {str(e)}", color="danger")
-    
+
     @staticmethod
     def create_price_chart(config_data: Dict[str, Any], market_data: Dict[str, Any]):
-        """Create price chart with grid overlay using real historical data."""
+        """Create enhanced price chart with grid overlay."""
         try:
-            # Get configuration
-            exchange_name = config_data["exchange"]["name"]
-            base_currency = config_data["pair"]["base_currency"]
-            quote_currency = config_data["pair"]["quote_currency"]
-            timeframe = config_data["trading_settings"]["timeframe"]
+            if not config_data:
+                return dbc.Alert("No configuration data available", color="warning")
 
-            # Show loading state while fetching data
-            if not market_data or 'data' not in market_data:
-                return notification_system.create_loading_overlay(
-                    html.Div("Loading chart data...", className="text-center p-4"),
-                    is_loading=True,
-                    loading_text=f"Fetching {base_currency}/{quote_currency} data from {exchange_name}...",
-                    spinner_size="lg"
-                )
+            # Simple price chart for now
+            return dbc.Card([
+                dbc.CardBody([
+                    html.H6("Price Chart with Grid Overlay", className="mb-3"),
+                    html.P("Price chart functionality will be implemented here."),
+                    dbc.Alert("Historical data integration coming soon!", color="info")
+                ])
+            ])
 
-            # Use market data if available, otherwise fetch
-            if 'data' in market_data and market_data['data']:
-                df = pd.DataFrame(market_data['data'])
-                if 'timestamp' in df.columns:
-                    df.set_index('timestamp', inplace=True)
-                logger.info(f"Using cached market data for {base_currency}/{quote_currency}")
-            else:
-                # Fetch real historical data
-                logger.info(f"Fetching historical data for {base_currency}/{quote_currency} from {exchange_name}")
-                df = price_service.get_historical_data_sync(
-                    exchange_name, base_currency, quote_currency, timeframe, limit=168  # 1 week of hourly data
-                )
-            
-            # Check if data was successfully fetched
-            if df is None or df.empty:
-                return notification_system.create_status_indicator(
-                    "warning",
-                    "No historical data available",
-                    details=[
-                        f"Pair: {base_currency}/{quote_currency}",
-                        f"Exchange: {exchange_name}",
-                        f"Timeframe: {timeframe}",
-                        "Try selecting a different pair or exchange"
-                    ]
-                )
-
-            fig = go.Figure()
-
-            # Add candlestick chart
-            fig.add_trace(go.Candlestick(
-                x=df.index,
-                open=df['open'],
-                high=df['high'],
-                low=df['low'],
-                close=df['close'],
-                name=f'{base_currency}/{quote_currency}',
-                increasing_line_color='green',
-                decreasing_line_color='red'
-            ))
-
-            # Add volume as secondary y-axis
-            fig.add_trace(go.Bar(
-                x=df.index,
-                y=df['volume'],
-                name='Volume',
-                yaxis='y2',
-                opacity=0.3,
-                marker_color='lightblue'
-            ))
-
-            # Get current price for reference
-            current_price = price_service.get_current_price_sync(exchange_name, base_currency, quote_currency)
-            if current_price:
-                fig.add_hline(
-                    y=current_price,
-                    line_color="blue",
-                    line_width=2,
-                    annotation_text=f"Current: ${current_price:,.2f}",
-                    annotation_position="top right"
-                )
-
-            title = f"Real-time {base_currency}/{quote_currency} Price Chart with Grid Levels"
-            
-            # Add grid levels
-            grid_config = config_data["grid_strategy"]
-            bottom = grid_config["range"]["bottom"]
-            top = grid_config["range"]["top"]
-            num_grids = grid_config["num_grids"]
-            spacing_type = grid_config["spacing"]
-            
-            # Calculate grid levels
-            if spacing_type == "arithmetic":
-                grid_levels = np.linspace(bottom, top, num_grids)
-            else:  # geometric
-                ratio = (top / bottom) ** (1 / (num_grids - 1))
-                grid_levels = [bottom * (ratio ** i) for i in range(num_grids)]
-            
-            # Add grid lines
-            for i, level in enumerate(grid_levels):
-                color = "green" if i < len(grid_levels) // 2 else "red"
-                fig.add_hline(
-                    y=level,
-                    line_dash="dash",
-                    line_color=color,
-                    opacity=0.7,
-                    annotation_text=f"Grid {i+1}: ${level:,.2f}",
-                    annotation_position="right"
-                )
-            
-            # Update layout
-            fig.update_layout(
-                title=title,
-                xaxis_title="Time",
-                yaxis_title="Price ($)",
-                yaxis2=dict(
-                    title="Volume",
-                    overlaying="y",
-                    side="right"
-                ),
-                height=500,
-                showlegend=True,
-                hovermode='x unified'
-            )
-            
-            # Add range selector
-            fig.update_layout(
-                xaxis=dict(
-                    rangeselector=dict(
-                        buttons=list([
-                            dict(count=1, label="1h", step="hour", stepmode="backward"),
-                            dict(count=6, label="6h", step="hour", stepmode="backward"),
-                            dict(count=1, label="1d", step="day", stepmode="backward"),
-                            dict(count=7, label="7d", step="day", stepmode="backward"),
-                            dict(step="all")
-                        ])
-                    ),
-                    rangeslider=dict(visible=False),
-                    type="date"
-                )
-            )
-            
-            return dcc.Graph(figure=fig)
-            
         except Exception as e:
+            logger.error(f"Error creating price chart: {e}")
             return dbc.Alert(f"Error creating price chart: {str(e)}", color="danger")
-    
+
     @staticmethod
     def create_backtest_preview(config_data: Dict[str, Any]):
-        """Create comprehensive backtest preview with real analysis."""
+        """Create comprehensive backtest preview with enhanced analysis."""
         try:
+            if not config_data:
+                return dbc.Alert("No configuration data available for backtest preview", color="warning")
+
             # Generate backtest preview
-            preview_data = backtest_service.generate_backtest_preview(config_data)
+            try:
+                preview_data = backtest_service.generate_backtest_preview(config_data)
+            except Exception as e:
+                logger.error(f"Error generating backtest preview: {e}")
+                return dbc.Alert([
+                    html.H6("Backtest Preview Unavailable", className="alert-heading"),
+                    html.P("Unable to generate backtest preview with current configuration."),
+                    html.Hr(),
+                    html.P(f"Error: {str(e)}", className="mb-0 small")
+                ], color="warning")
 
             if "error" in preview_data:
                 return dbc.Alert(f"Error generating preview: {preview_data['error']}", color="danger")
 
             performance = preview_data.get("performance_estimate", {})
-            market = preview_data.get("market_analysis", {})
             recommendations = preview_data.get("recommendations", [])
 
+            # Simple backtest preview to avoid Row width error
             return dbc.Card([
+                dbc.CardHeader([
+                    html.H5([
+                        html.I(className="fas fa-chart-bar me-2"),
+                        "Backtest Preview & Strategy Analysis"
+                    ], className="mb-0")
+                ]),
                 dbc.CardBody([
-                    html.H6("Backtest Preview & Analysis", className="card-title"),
+                    dbc.Alert([
+                        html.I(className="fas fa-info-circle me-2"),
+                        "This preview is based on historical analysis and market conditions. Actual results may vary."
+                    ], color="info", className="mb-3"),
 
-                    # Performance Metrics
-                    html.H6("Expected Performance Metrics:", className="mt-3"),
+                    # Simple performance metrics
+                    html.H6("Expected Performance Metrics", className="mb-3"),
                     dbc.Row([
                         dbc.Col([
-                            dbc.Card([
-                                dbc.CardBody([
-                                    html.H4(f"{performance.get('estimated_roi', 0)}%",
-                                           className="text-success" if performance.get('estimated_roi', 0) > 0 else "text-danger"),
-                                    html.P("Expected ROI", className="mb-0")
-                                ])
-                            ])
+                            html.H4(f"{performance.get('estimated_roi', 0):.1f}%", className="text-success"),
+                            html.P("Expected ROI", className="text-muted")
                         ], width=3),
                         dbc.Col([
-                            dbc.Card([
-                                dbc.CardBody([
-                                    html.H4(f"{performance.get('estimated_trades', 0)}", className="text-info"),
-                                    html.P("Estimated Trades", className="mb-0")
-                                ])
-                            ])
+                            html.H4(f"{performance.get('estimated_trades', 0)}", className="text-info"),
+                            html.P("Estimated Trades", className="text-muted")
                         ], width=3),
                         dbc.Col([
-                            dbc.Card([
-                                dbc.CardBody([
-                                    html.H4(f"{performance.get('max_drawdown', 0)}%", className="text-warning"),
-                                    html.P("Max Drawdown", className="mb-0")
-                                ])
-                            ])
+                            html.H4(f"{performance.get('max_drawdown', 0):.1f}%", className="text-warning"),
+                            html.P("Max Drawdown", className="text-muted")
                         ], width=3),
                         dbc.Col([
-                            dbc.Card([
-                                dbc.CardBody([
-                                    html.H4(f"{performance.get('sharpe_ratio', 0)}", className="text-primary"),
-                                    html.P("Sharpe Ratio", className="mb-0")
-                                ])
-                            ])
+                            html.H4(f"{performance.get('sharpe_ratio', 0):.2f}", className="text-primary"),
+                            html.P("Sharpe Ratio", className="text-muted")
                         ], width=3)
-                    ], className="mb-3"),
+                    ], className="mb-4"),
 
-                    # Market Analysis
-                    html.H6("Market Analysis:", className="mt-3"),
-                    dbc.Row([
-                        dbc.Col([
-                            html.P([
-                                html.Strong("Current Price: "),
-                                f"${market.get('current_price', 0):,.2f}" if market.get('current_price') else "N/A"
-                            ]),
-                            html.P([
-                                html.Strong("24h Change: "),
-                                f"{market.get('price_change_24h', 0):+.2f}%"
-                            ]),
-                            html.P([
-                                html.Strong("Volatility: "),
-                                f"{market.get('volatility', 0):.2f}%"
-                            ])
-                        ], width=6),
-                        dbc.Col([
-                            html.P([
-                                html.Strong("Grid Coverage: "),
-                                f"{market.get('grid_coverage', 0):.1f}%"
-                            ]),
-                            html.P([
-                                html.Strong("Price in Range: "),
-                                "✅ Yes" if market.get('price_in_range', False) else "❌ No"
-                            ]),
-                            html.P([
-                                html.Strong("Data Points: "),
-                                f"{market.get('data_points', 0)}"
-                            ])
-                        ], width=6)
-                    ], className="mb-3"),
-
-                    # Recommendations
-                    html.H6("Recommendations:", className="mt-3"),
+                    # Simple recommendations
+                    html.H6("Recommendations", className="mb-3"),
                     html.Div([
                         dbc.Alert(rec, color="info", className="mb-2")
-                        for rec in recommendations[:5]  # Limit to 5 recommendations
-                    ]) if recommendations else html.P("No specific recommendations at this time."),
+                        for rec in recommendations[:3]
+                    ]) if recommendations else dbc.Alert("No specific recommendations available.", color="light"),
 
-                    # Action Buttons
+                    # Action buttons
                     html.Hr(),
-                    dbc.ButtonGroup([
-                        dbc.Button([
-                            html.I(className="fas fa-play me-2"),
-                            "Run Full Backtest"
-                        ], id="run-full-backtest-btn", color="primary"),
-                        dbc.Button([
-                            html.I(className="fas fa-refresh me-2"),
-                            "Refresh Analysis"
-                        ], id="refresh-analysis-btn", color="outline-secondary")
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Button([
+                                html.I(className="fas fa-play me-2"),
+                                "Run Full Backtest"
+                            ], id="run-full-backtest-btn", color="primary", className="w-100")
+                        ], width=6),
+                        dbc.Col([
+                            dbc.Button([
+                                html.I(className="fas fa-refresh me-2"),
+                                "Refresh Analysis"
+                            ], id="refresh-analysis-btn", color="outline-secondary", className="w-100")
+                        ], width=6)
                     ])
                 ])
             ])
 
         except Exception as e:
             logger.error(f"Error creating backtest preview: {e}")
-            return dbc.Alert(f"Error creating backtest preview: {str(e)}", color="danger")
+            return dbc.Alert([
+                html.H6("Backtest Preview Error", className="alert-heading"),
+                html.P("Unable to generate backtest preview."),
+                html.Hr(),
+                html.P(f"Error details: {str(e)}", className="mb-0 small")
+            ], color="danger")

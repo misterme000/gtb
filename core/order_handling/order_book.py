@@ -46,11 +46,47 @@ class OrderBook:
         return self.order_to_grid_map.get(order)
 
     def update_order_status(
-        self, 
-        order_id: str, 
+        self,
+        order_id: str,
         new_status: OrderStatus
     ) -> None:
         for order in self.buy_orders + self.sell_orders:
             if order.identifier == order_id:
                 order.status = new_status
                 break
+
+    def remove_order(self, order_id: str) -> Optional[Order]:
+        """
+        Removes an order from the order book by its identifier.
+
+        Args:
+            order_id: The identifier of the order to remove.
+
+        Returns:
+            The removed Order object if found, None otherwise.
+        """
+        # Check buy orders
+        for i, order in enumerate(self.buy_orders):
+            if order.identifier == order_id:
+                removed_order = self.buy_orders.pop(i)
+                # Remove from grid mapping if it exists
+                if removed_order in self.order_to_grid_map:
+                    del self.order_to_grid_map[removed_order]
+                # Remove from non-grid orders if it exists
+                if removed_order in self.non_grid_orders:
+                    self.non_grid_orders.remove(removed_order)
+                return removed_order
+
+        # Check sell orders
+        for i, order in enumerate(self.sell_orders):
+            if order.identifier == order_id:
+                removed_order = self.sell_orders.pop(i)
+                # Remove from grid mapping if it exists
+                if removed_order in self.order_to_grid_map:
+                    del self.order_to_grid_map[removed_order]
+                # Remove from non-grid orders if it exists
+                if removed_order in self.non_grid_orders:
+                    self.non_grid_orders.remove(removed_order)
+                return removed_order
+
+        return None

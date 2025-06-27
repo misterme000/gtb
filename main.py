@@ -14,14 +14,49 @@ from config.config_validator import ConfigValidator
 from config.exceptions import ConfigError
 from utils.logging_config import setup_logging
 from utils.config_name_generator import generate_config_name
+from core.error_handling import (
+    ErrorContext, ErrorCategory, ErrorSeverity,
+    ConfigurationError, error_handler, handle_error_decorator
+)
+from core.error_handling.setup import setup_error_handling
 
+@handle_error_decorator(
+    category=ErrorCategory.CONFIGURATION,
+    severity=ErrorSeverity.CRITICAL,
+    recovery_suggestions=[
+        "Check configuration file path",
+        "Verify configuration file format",
+        "Use a valid template configuration",
+        "Check file permissions"
+    ]
+)
 def initialize_config(config_path: str) -> ConfigManager:
     load_dotenv()
+
+    # Setup error handling framework
+    setup_error_handling()
+
+    context = ErrorContext(
+        operation="initialize_config",
+        component="main",
+        additional_data={"config_path": config_path}
+    )
+
     try:
         return ConfigManager(config_path, ConfigValidator())
 
     except ConfigError as e:
-        logging.error(f"An error occured during the initialization of ConfigManager {e}")
+        config_error = ConfigurationError(
+            message=f"Configuration initialization failed: {str(e)}",
+            context=context,
+            original_exception=e,
+            user_message="Failed to load configuration. Please check your configuration file and try again."
+        )
+
+        # Handle the error (this will log it appropriately)
+        error_handler._log_error(config_error)  # Sync call
+
+        logging.error(f"An error occurred during the initialization of ConfigManager: {e}")
         exit(1)
 
 def parse_notification_urls() -> List[str]:

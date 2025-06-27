@@ -220,6 +220,36 @@ class BalanceTracker:
         """
         return self.balance + self.reserved_fiat
 
+    def release_reserved_buy_funds(self, amount: float) -> None:
+        """
+        Releases reserved fiat funds back to the main balance when a buy order is cancelled.
+
+        Args:
+            amount: The amount of fiat to release from reserved funds.
+        """
+        if self.reserved_fiat < amount:
+            self.logger.warning(f"Attempting to release {amount} fiat but only {self.reserved_fiat} is reserved. Releasing all reserved funds.")
+            amount = self.reserved_fiat
+
+        self.reserved_fiat -= amount
+        self.balance += amount
+        self.logger.info(f"Released {amount} reserved fiat funds. Available balance: {self.balance}, Reserved: {self.reserved_fiat}")
+
+    def release_reserved_sell_funds(self, quantity: float) -> None:
+        """
+        Releases reserved crypto funds back to the main balance when a sell order is cancelled.
+
+        Args:
+            quantity: The quantity of crypto to release from reserved funds.
+        """
+        if self.reserved_crypto < quantity:
+            self.logger.warning(f"Attempting to release {quantity} crypto but only {self.reserved_crypto} is reserved. Releasing all reserved crypto.")
+            quantity = self.reserved_crypto
+
+        self.reserved_crypto -= quantity
+        self.crypto_balance += quantity
+        self.logger.info(f"Released {quantity} reserved crypto funds. Available crypto: {self.crypto_balance}, Reserved: {self.reserved_crypto}")
+
     def get_adjusted_crypto_balance(self) -> float:
         """
         Returns the crypto balance, including reserved funds.

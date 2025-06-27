@@ -226,8 +226,8 @@ class GridManager:
             self.logger.info(f"Sell order placed and marked as pending at grid level {grid_level.price}.")
 
     def complete_order(
-        self, 
-        grid_level: GridLevel, 
+        self,
+        grid_level: GridLevel,
         order_side: OrderSide
     ) -> None:
         """
@@ -244,6 +244,34 @@ class GridManager:
             elif order_side == OrderSide.SELL:
                 grid_level.state = GridCycleState.READY_TO_BUY
                 self.logger.info(f"Sell order completed at grid level {grid_level.price}. Transitioning to READY_TO_BUY.")
+
+    def mark_order_cancelled(
+        self,
+        grid_level: GridLevel,
+        cancelled_order: Order
+    ) -> None:
+        """
+        Marks an order as cancelled and updates the grid level state accordingly.
+
+        Args:
+            grid_level: The grid level where the order was cancelled.
+            cancelled_order: The cancelled Order instance.
+        """
+        # Remove the cancelled order from the grid level
+        if cancelled_order in grid_level.orders:
+            grid_level.orders.remove(cancelled_order)
+            self.logger.info(f"Removed cancelled order {cancelled_order.identifier} from grid level {grid_level.price}")
+
+        # Update grid level state based on the cancelled order type and strategy
+        if self.strategy_type == StrategyType.SIMPLE_GRID:
+            if cancelled_order.side == OrderSide.BUY:
+                # If a buy order was cancelled, the grid level should be ready to place another buy order
+                grid_level.state = GridCycleState.READY_TO_BUY
+                self.logger.info(f"Buy order cancelled at grid level {grid_level.price}. Transitioning to READY_TO_BUY.")
+            elif cancelled_order.side == OrderSide.SELL:
+                # If a sell order was cancelled, the grid level should be ready to place another sell order
+                grid_level.state = GridCycleState.READY_TO_SELL
+                self.logger.info(f"Sell order cancelled at grid level {grid_level.price}. Transitioning to READY_TO_SELL.")
         
         elif self.strategy_type == StrategyType.HEDGED_GRID:
             if order_side == OrderSide.BUY:

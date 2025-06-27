@@ -1,58 +1,90 @@
 """
 Configuration Management Utilities for Grid Trading Bot Web UI
 
-Handles configuration export, import, and file management.
+This is now a wrapper around the UnifiedConfigurationService to maintain
+backward compatibility while using the consolidated configuration system.
 """
 
 import json
 import logging
 import os
+import sys
 from datetime import datetime
 from typing import Dict, Any, Optional, Tuple, List
 from pathlib import Path
 import base64
 
+# Add the project root to the path to import from config
+sys.path.append(str(Path(__file__).parent.parent.parent))
+
+try:
+    from config.unified_config_service import unified_config_service
+except ImportError:
+    # Fallback for development/testing
+    unified_config_service = None
+
 logger = logging.getLogger(__name__)
 
 
 class UIConfigManager:
-    """Manages configuration files for the Web UI."""
-    
+    """
+    Web UI Configuration Manager - now uses UnifiedConfigurationService.
+
+    This class maintains backward compatibility while delegating to the
+    unified configuration service for actual operations.
+    """
+
     def __init__(self):
         """Initialize the config manager."""
         self.config_dir = Path("config")
         self.config_dir.mkdir(exist_ok=True)
-        
+
         # Templates directory
         self.templates_dir = self.config_dir / "templates"
         self.templates_dir.mkdir(exist_ok=True)
-        
+
         # User configs directory
         self.user_configs_dir = self.config_dir / "user_configs"
         self.user_configs_dir.mkdir(exist_ok=True)
+
+        # Use unified service if available, otherwise fall back to legacy behavior
+        self._use_unified_service = unified_config_service is not None
+        if self._use_unified_service:
+            logger.info("Using UnifiedConfigurationService for web UI configuration management")
+        else:
+            logger.warning("UnifiedConfigurationService not available, using legacy implementation")
     
     def save_config(self, config: Dict[str, Any], filename: Optional[str] = None) -> Tuple[bool, str]:
         """
         Save configuration to file.
-        
+
         Args:
             config: Configuration dictionary
             filename: Optional filename, auto-generated if not provided
-            
+
         Returns:
             Tuple of (success, message/filepath)
         """
+        if self._use_unified_service:
+            # Use unified configuration service
+            return unified_config_service.save_configuration(config, filename)
+        else:
+            # Fall back to legacy implementation
+            return self._legacy_save_config(config, filename)
+
+    def _legacy_save_config(self, config: Dict[str, Any], filename: Optional[str] = None) -> Tuple[bool, str]:
+        """Legacy save configuration method for fallback."""
         try:
             if not filename:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"grid_config_{timestamp}.json"
-            
+
             # Ensure .json extension
             if not filename.endswith('.json'):
                 filename += '.json'
-            
+
             filepath = self.user_configs_dir / filename
-            
+
             # Add metadata
             config_with_metadata = {
                 "metadata": {
@@ -63,13 +95,13 @@ class UIConfigManager:
                 },
                 "config": config
             }
-            
+
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(config_with_metadata, f, indent=2, ensure_ascii=False)
-            
+
             logger.info(f"Configuration saved to {filepath}")
             return True, str(filepath)
-            
+
         except Exception as e:
             error_msg = f"Failed to save configuration: {str(e)}"
             logger.error(error_msg)
@@ -78,17 +110,26 @@ class UIConfigManager:
     def load_config(self, filepath: str) -> Tuple[bool, Dict[str, Any], str]:
         """
         Load configuration from file.
-        
+
         Args:
             filepath: Path to configuration file
-            
+
         Returns:
             Tuple of (success, config_dict, message)
         """
+        if self._use_unified_service:
+            # Use unified configuration service
+            return unified_config_service.load_configuration(filepath)
+        else:
+            # Fall back to legacy implementation
+            return self._legacy_load_config(filepath)
+
+    def _legacy_load_config(self, filepath: str) -> Tuple[bool, Dict[str, Any], str]:
+        """Legacy load configuration method for fallback."""
         try:
             with open(filepath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            
+
             # Handle both old format (direct config) and new format (with metadata)
             if "config" in data and "metadata" in data:
                 config = data["config"]
@@ -97,10 +138,10 @@ class UIConfigManager:
             else:
                 config = data
                 message = "Loaded configuration (legacy format)"
-            
+
             logger.info(f"Configuration loaded from {filepath}")
             return True, config, message
-            
+
         except FileNotFoundError:
             error_msg = f"Configuration file not found: {filepath}"
             logger.error(error_msg)
@@ -117,23 +158,32 @@ class UIConfigManager:
     def export_config_for_download(self, config: Dict[str, Any], filename: str = None) -> Tuple[bool, str, str]:
         """
         Export configuration for browser download.
-        
+
         Args:
             config: Configuration dictionary
             filename: Optional filename
-            
+
         Returns:
             Tuple of (success, base64_data, filename)
         """
+        if self._use_unified_service:
+            # Use unified configuration service
+            return unified_config_service.export_configuration(config, filename)
+        else:
+            # Fall back to legacy implementation
+            return self._legacy_export_config(config, filename)
+
+    def _legacy_export_config(self, config: Dict[str, Any], filename: str = None) -> Tuple[bool, str, str]:
+        """Legacy export configuration method for fallback."""
         try:
             if not filename:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"grid_config_{timestamp}.json"
-            
+
             # Ensure .json extension
             if not filename.endswith('.json'):
                 filename += '.json'
-            
+
             # Add metadata
             config_with_metadata = {
                 "metadata": {
@@ -145,16 +195,16 @@ class UIConfigManager:
                 },
                 "config": config
             }
-            
+
             # Convert to JSON string
             json_str = json.dumps(config_with_metadata, indent=2, ensure_ascii=False)
-            
+
             # Encode to base64 for download
             base64_data = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
-            
+
             logger.info(f"Configuration prepared for download as {filename}")
             return True, base64_data, filename
-            
+
         except Exception as e:
             error_msg = f"Failed to export configuration: {str(e)}"
             logger.error(error_msg)
@@ -163,16 +213,25 @@ class UIConfigManager:
     def import_config_from_upload(self, file_content: str) -> Tuple[bool, Dict[str, Any], str]:
         """
         Import configuration from uploaded file content.
-        
+
         Args:
             file_content: JSON string content of uploaded file
-            
+
         Returns:
             Tuple of (success, config_dict, message)
         """
+        if self._use_unified_service:
+            # Use unified configuration service
+            return unified_config_service.import_configuration(file_content)
+        else:
+            # Fall back to legacy implementation
+            return self._legacy_import_config(file_content)
+
+    def _legacy_import_config(self, file_content: str) -> Tuple[bool, Dict[str, Any], str]:
+        """Legacy import configuration method for fallback."""
         try:
             data = json.loads(file_content)
-            
+
             # Handle both old format (direct config) and new format (with metadata)
             if "config" in data and "metadata" in data:
                 config = data["config"]
@@ -181,18 +240,18 @@ class UIConfigManager:
             else:
                 config = data
                 message = "Imported configuration (legacy format)"
-            
+
             # Basic validation
             required_sections = ["exchange", "pair", "trading_settings", "grid_strategy"]
             missing_sections = [section for section in required_sections if section not in config]
-            
+
             if missing_sections:
                 error_msg = f"Configuration missing required sections: {', '.join(missing_sections)}"
                 return False, {}, error_msg
-            
+
             logger.info("Configuration imported successfully")
             return True, config, message
-            
+
         except json.JSONDecodeError as e:
             error_msg = f"Invalid JSON format: {str(e)}"
             logger.error(error_msg)
@@ -205,21 +264,30 @@ class UIConfigManager:
     def list_saved_configs(self) -> List[Dict[str, Any]]:
         """
         List all saved configuration files.
-        
+
         Returns:
             List of config file information
         """
+        if self._use_unified_service:
+            # Use unified configuration service
+            return unified_config_service.list_user_configurations()
+        else:
+            # Fall back to legacy implementation
+            return self._legacy_list_configs()
+
+    def _legacy_list_configs(self) -> List[Dict[str, Any]]:
+        """Legacy list configurations method for fallback."""
         try:
             configs = []
-            
+
             for filepath in self.user_configs_dir.glob("*.json"):
                 try:
                     stat = filepath.stat()
-                    
+
                     # Try to read metadata
                     with open(filepath, 'r', encoding='utf-8') as f:
                         data = json.load(f)
-                    
+
                     if "metadata" in data:
                         metadata = data["metadata"]
                         description = metadata.get("description", "No description")
@@ -227,7 +295,7 @@ class UIConfigManager:
                     else:
                         description = "Legacy configuration file"
                         created_at = datetime.fromtimestamp(stat.st_mtime).isoformat()
-                    
+
                     configs.append({
                         "filename": filepath.name,
                         "filepath": str(filepath),

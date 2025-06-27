@@ -15,6 +15,10 @@ from core.bot_management.notification.notification_content import NotificationTy
 from strategies.strategy_type import StrategyType
 from config.trading_mode import TradingMode
 from .exceptions import OrderExecutionFailedError
+from core.error_handling import (
+    ErrorContext, ErrorCategory, ErrorSeverity,
+    OrderExecutionError, error_handler, handle_error_decorator
+)
 
 class OrderManager:
     def __init__(
@@ -133,17 +137,166 @@ class OrderManager:
                     await self.notification_handler.async_send_notification(NotificationType.ERROR_OCCURRED, error_details=f"Error while placing initial sell order: {str(e)}")
 
     async def _on_order_cancelled(
-        self, 
+        self,
         order: Order
     ) -> None:
         """
-        Handles cancelled orders.
+        Handles cancelled orders by attempting to replace them with new limit orders.
 
         Args:
             order: The cancelled Order instance.
         """
-        ## TODO: place new limit Order
-        await self.notification_handler.async_send_notification(NotificationType.ORDER_CANCELLED, order_details=str(order))  
+        try:
+            self.logger.info(f"Handling cancelled order: {order.identifier} at price {order.price}")
+
+            # Get the grid level associated with the cancelled order
+            grid_level = self.order_book.get_grid_level_for_order(order)
+
+            if not grid_level:
+                self.logger.warning(f"No grid level found for cancelled order {order.identifier}. Cannot replace order.")
+                await self.notification_handler.async_send_notification(
+                    NotificationType.ORDER_CANCELLED,
+                    order_details=f"Order cancelled but cannot be replaced: {str(order)}"
+                )
+                return
+
+            # Mark the grid level as available for new orders
+            self.grid_manager.mark_order_cancelled(grid_level, order)
+
+            # Remove the cancelled order from the order book
+            self.order_book.remove_order(order.identifier)
+
+            # Release reserved funds based on order type
+            if order.side == OrderSide.BUY:
+                reserved_amount = order.amount * order.price
+                self.balance_tracker.release_reserved_buy_funds(reserved_amount)
+                self.logger.info(f"Released {reserved_amount} reserved buy funds for cancelled order")
+            else:  # SELL order
+                self.balance_tracker.release_reserved_sell_funds(order.amount)
+                self.logger.info(f"Released {order.amount} reserved sell funds for cancelled order")
+
+            # Attempt to place a replacement order at the same grid level
+            await self._place_replacement_order(order, grid_level)
+
+        except Exception as e:
+            context = ErrorContext(
+                operation="handle_cancelled_order",
+                component="OrderManager",
+                additional_data={
+                    "order_id": order.identifier,
+                    "order_price": order.price,
+                    "order_side": order.side.value
+                }
+            )
+
+            error = OrderExecutionError(
+                message=f"Error handling cancelled order {order.identifier}: {str(e)}",
+                context=context,
+                original_exception=e,
+                severity=ErrorSeverity.HIGH,
+                recovery_suggestions=[
+                    "Check order status manually",
+                    "Verify grid level state",
+                    "Review balance allocation"
+                ]
+            )
+
+            handled_error = await error_handler.handle_error(error)
+            if handled_error:
+                await self.notification_handler.async_send_notification(
+                    NotificationType.ERROR_OCCURRED,
+                    error_details=handled_error.user_message
+                )
+
+    async def _place_replacement_order(
+        self,
+        cancelled_order: Order,
+        grid_level: GridLevel
+    ) -> None:
+        """
+        Places a replacement order for a cancelled order at the same grid level.
+
+        Args:
+            cancelled_order: The original cancelled order
+            grid_level: The grid level where the replacement order should be placed
+        """
+        try:
+            # Check if we can still place an order at this grid level
+            if not self.grid_manager.can_place_order(grid_level, cancelled_order.side):
+                self.logger.info(f"Cannot place replacement order at grid level {grid_level.price} - conditions not met")
+                await self.notification_handler.async_send_notification(
+                    NotificationType.ORDER_CANCELLED,
+                    order_details=f"Cancelled order not replaced - grid conditions changed: {str(cancelled_order)}"
+                )
+                return
+
+            # Calculate the replacement order quantity
+            if cancelled_order.side == OrderSide.BUY:
+                # For buy orders, validate against current balance
+                adjusted_quantity = self.order_validator.adjust_and_validate_buy_quantity(
+                    balance=self.balance_tracker.balance,
+                    order_quantity=cancelled_order.amount,
+                    price=grid_level.price
+                )
+            else:
+                # For sell orders, validate against crypto balance
+                adjusted_quantity = self.order_validator.adjust_and_validate_sell_quantity(
+                    crypto_balance=self.balance_tracker.crypto_balance,
+                    order_quantity=cancelled_order.amount
+                )
+
+            if adjusted_quantity <= 0:
+                self.logger.warning(f"Cannot place replacement order - insufficient balance for {cancelled_order.side.value} order")
+                await self.notification_handler.async_send_notification(
+                    NotificationType.ORDER_CANCELLED,
+                    order_details=f"Cancelled order not replaced - insufficient balance: {str(cancelled_order)}"
+                )
+                return
+
+            # Place the replacement limit order
+            self.logger.info(f"Placing replacement {cancelled_order.side.value} order at grid level {grid_level.price} for {adjusted_quantity}")
+            replacement_order = await self.order_execution_strategy.execute_limit_order(
+                cancelled_order.side,
+                self.trading_pair,
+                adjusted_quantity,
+                grid_level.price
+            )
+
+            if replacement_order:
+                # Reserve funds for the new order
+                if cancelled_order.side == OrderSide.BUY:
+                    self.balance_tracker.reserve_funds_for_buy(adjusted_quantity * grid_level.price)
+                else:
+                    self.balance_tracker.reserve_funds_for_sell(adjusted_quantity)
+
+                # Update grid manager and order book
+                self.grid_manager.mark_order_pending(grid_level, replacement_order)
+                self.order_book.add_order(replacement_order, grid_level)
+
+                self.logger.info(f"Successfully placed replacement order {replacement_order.identifier}")
+                await self.notification_handler.async_send_notification(
+                    NotificationType.ORDER_PLACED,
+                    order_details=f"Replacement order placed: {str(replacement_order)}"
+                )
+            else:
+                self.logger.error(f"Failed to place replacement order at grid level {grid_level.price}")
+                await self.notification_handler.async_send_notification(
+                    NotificationType.ORDER_FAILED,
+                    error_details=f"Failed to place replacement order for cancelled order: {str(cancelled_order)}"
+                )
+
+        except OrderExecutionFailedError as e:
+            self.logger.error(f"Failed to place replacement order: {str(e)}", exc_info=True)
+            await self.notification_handler.async_send_notification(
+                NotificationType.ORDER_FAILED,
+                error_details=f"Failed to place replacement order: {str(e)}"
+            )
+        except Exception as e:
+            self.logger.error(f"Unexpected error placing replacement order: {e}", exc_info=True)
+            await self.notification_handler.async_send_notification(
+                NotificationType.ERROR_OCCURRED,
+                error_details=f"Unexpected error placing replacement order: {str(e)}"
+            )
 
     async def _on_order_filled(
         self, 

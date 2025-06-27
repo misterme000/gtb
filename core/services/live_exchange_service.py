@@ -6,6 +6,11 @@ import pandas as pd
 from config.config_manager import ConfigManager
 from .exchange_interface import ExchangeInterface
 from .exceptions import UnsupportedExchangeError, DataFetchError, OrderCancellationError, MissingEnvironmentVariableError
+from core.error_handling import (
+    ErrorContext, ErrorCategory, ErrorSeverity,
+    NetworkError as UnifiedNetworkError, ExchangeError as UnifiedExchangeError,
+    error_handler, handle_error_decorator
+)
 
 class LiveExchangeService(ExchangeInterface):
     def __init__(
@@ -135,26 +140,63 @@ class LiveExchangeService(ExchangeInterface):
         except BaseError as e:
             raise DataFetchError(f"Error fetching current price: {str(e)}")
 
+    @handle_error_decorator(
+        category=ErrorCategory.ORDER_EXECUTION,
+        severity=ErrorSeverity.HIGH,
+        recovery_suggestions=[
+            "Check account balance and available funds",
+            "Verify order parameters (pair, amount, price)",
+            "Check exchange connectivity",
+            "Try again with adjusted parameters"
+        ]
+    )
     async def place_order(
-        self, 
+        self,
         pair: str,
         order_type: str,
-        order_side: str, 
-        amount: float, 
+        order_side: str,
+        amount: float,
         price: Optional[float] = None
     ) -> Dict[str, Union[str, float]]:
+        context = ErrorContext(
+            operation="place_order",
+            component="LiveExchangeService",
+            additional_data={
+                "pair": pair,
+                "order_type": order_type,
+                "order_side": order_side,
+                "amount": amount,
+                "price": price
+            }
+        )
+
         try:
             order = await self.exchange.create_order(pair, order_type, order_side, amount, price)
             return order
 
         except NetworkError as e:
-            raise DataFetchError(f"Network issue occurred while placing order: {str(e)}")
+            network_error = UnifiedNetworkError(
+                message=f"Network issue occurred while placing order: {str(e)}",
+                context=context,
+                original_exception=e
+            )
+            handled_error = await error_handler.handle_error(network_error)
+            if handled_error:
+                raise DataFetchError(handled_error.user_message)
 
         except BaseError as e:
-            raise DataFetchError(f"Error placing order: {str(e)}")
+            exchange_error = UnifiedExchangeError(
+                message=f"Exchange error while placing order: {str(e)}",
+                context=context,
+                original_exception=e
+            )
+            handled_error = await error_handler.handle_error(exchange_error)
+            if handled_error:
+                raise DataFetchError(handled_error.user_message)
 
         except Exception as e:
-            raise DataFetchError(f"Unexpected error placing order: {str(e)}")
+            # Let the decorator handle unexpected errors
+            raise
 
     async def fetch_order(
         self, 

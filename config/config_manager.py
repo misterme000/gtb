@@ -4,23 +4,92 @@ from strategies.spacing_type import SpacingType
 from strategies.strategy_type import StrategyType
 from .trading_mode import TradingMode
 from .exceptions import ConfigFileNotFoundError, ConfigParseError
+from .unified_config_service import UnifiedConfigurationService
+from core.error_handling import (
+    ErrorContext, ErrorCategory, ErrorSeverity,
+    ConfigurationError, error_handler, handle_error_decorator
+)
 
 class ConfigManager:
+    """
+    Legacy ConfigManager with backward compatibility.
+
+    This class now uses the UnifiedConfigurationService internally while maintaining
+    the same public interface for existing code.
+    """
+
     def __init__(self, config_file, config_validator):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.config_file = config_file
         self.config_validator = config_validator
         self.config = None
+
+        # Use unified configuration service internally
+        self._unified_service = UnifiedConfigurationService(config_validator)
+
         self.load_config()
 
+    @handle_error_decorator(
+        category=ErrorCategory.CONFIGURATION,
+        severity=ErrorSeverity.CRITICAL,
+        recovery_suggestions=[
+            "Check if configuration file exists",
+            "Verify configuration file format",
+            "Check file permissions",
+            "Use a template configuration file"
+        ]
+    )
     def load_config(self):
+        """Load configuration using the unified service."""
+        context = ErrorContext(
+            operation="load_config",
+            component="ConfigManager",
+            additional_data={"config_file": self.config_file}
+        )
+
+        try:
+            success, config, message = self._unified_service.load_configuration(self.config_file)
+            if success:
+                self.config = config
+                self.logger.info(f"Configuration loaded successfully: {message}")
+            else:
+                config_error = ConfigurationError(
+                    message=f"Failed to load configuration: {message}",
+                    context=context,
+                    user_message="Configuration file could not be loaded. Please check the file format and try again."
+                )
+
+                # Handle the error but maintain backward compatibility
+                handled_error = error_handler._log_error(config_error)  # Sync call for compatibility
+
+                # Maintain backward compatibility by raising the expected exceptions
+                if not os.path.exists(self.config_file):
+                    raise ConfigFileNotFoundError(self.config_file)
+                else:
+                    raise ConfigParseError(self.config_file, Exception(message))
+
+        except (ConfigFileNotFoundError, ConfigParseError):
+            # Re-raise these for backward compatibility
+            raise
+        except Exception as e:
+            # If unified service fails, fall back to original behavior for compatibility
+            self.logger.warning(f"Unified service failed, falling back to legacy loading: {e}")
+            self._legacy_load_config()
+
+    def _legacy_load_config(self):
+        """Legacy configuration loading method for fallback."""
         if not os.path.exists(self.config_file):
             self.logger.error(f"Config file {self.config_file} does not exist.")
             raise ConfigFileNotFoundError(self.config_file)
-        
+
         with open(self.config_file, 'r') as file:
             try:
-                self.config = json.load(file)
+                data = json.load(file)
+                # Handle both old format (direct config) and new format (with metadata)
+                if "config" in data and "metadata" in data:
+                    self.config = data["config"]
+                else:
+                    self.config = data
                 self.config_validator.validate(self.config)
             except json.JSONDecodeError as e:
                 self.logger.error(f"Failed to parse config file {self.config_file}: {e}")

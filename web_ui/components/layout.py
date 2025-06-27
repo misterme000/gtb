@@ -8,6 +8,7 @@ import dash_bootstrap_components as dbc
 from dash import html, dcc
 from typing import Dict, Any
 from web_ui.components.help_system import help_system
+from web_ui.components.notifications import notification_system
 
 
 class LayoutComponents:
@@ -128,7 +129,9 @@ class LayoutComponents:
                 # Tabs for different visualizations
                 dbc.Tabs([
                     dbc.Tab(label="Grid Layout", tab_id="grid-tab"),
+                    dbc.Tab(label="Interactive Grid", tab_id="interactive-tab"),
                     dbc.Tab(label="Price Chart", tab_id="chart-tab"),
+                    dbc.Tab(label="Real-time Monitor", tab_id="realtime-tab"),
                     dbc.Tab(label="Backtest Preview", tab_id="backtest-tab")
                 ], id="viz-tabs", active_tab="grid-tab"),
                 
@@ -178,6 +181,9 @@ class LayoutComponents:
             dcc.Store(id='market-data-store', data={}),
             dcc.Interval(id='price-update-interval', interval=30000, n_intervals=0),  # 30 seconds
             dcc.Interval(id='chart-update-interval', interval=60000, n_intervals=0),  # 1 minute for charts
+
+            # Notification system
+            notification_system.create_toast_container(),
 
             # Help system components
             help_system.create_help_modal()

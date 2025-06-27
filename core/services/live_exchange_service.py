@@ -4,7 +4,8 @@ import ccxt.pro as ccxtpro
 from typing import Dict, Union, Callable, Any, Optional
 import pandas as pd
 from config.config_manager import ConfigManager
-from .exchange_interface import ExchangeInterface
+from .base_exchange_service import BaseExchangeService, ExchangeServiceMixin
+from .data_formatting_service import data_formatter, data_validator
 from .exceptions import UnsupportedExchangeError, DataFetchError, OrderCancellationError, MissingEnvironmentVariableError
 from core.error_handling import (
     ErrorContext, ErrorCategory, ErrorSeverity,
@@ -12,28 +13,24 @@ from core.error_handling import (
     error_handler, handle_error_decorator
 )
 
-class LiveExchangeService(ExchangeInterface):
+class LiveExchangeService(BaseExchangeService, ExchangeServiceMixin):
     def __init__(
-        self, 
-        config_manager: ConfigManager, 
+        self,
+        config_manager: ConfigManager,
         is_paper_trading_activated: bool
     ):
-        self.config_manager = config_manager
         self.is_paper_trading_activated = is_paper_trading_activated
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.exchange_name = self.config_manager.get_exchange_name()
+        self.connection_active = False
+
+        # Initialize base class
+        super().__init__(config_manager)
+
+        # Get API credentials
         self.api_key = self._get_env_variable("EXCHANGE_API_KEY")
         self.secret_key = self._get_env_variable("EXCHANGE_SECRET_KEY")
-        self.exchange = self._initialize_exchange()
-        self.connection_active = False
     
-    def _get_env_variable(self, key: str) -> str:
-        value = os.getenv(key)
-        if value is None:
-            raise MissingEnvironmentVariableError(f"Missing required environment variable: {key}")
-        return value
-
-    def _initialize_exchange(self) -> None:
+    def _create_exchange_instance(self) -> ccxt.Exchange:
+        """Create and configure the exchange instance for live trading."""
         try:
             exchange = getattr(ccxtpro, self.exchange_name)({
                 'apiKey': self.api_key,
@@ -43,6 +40,9 @@ class LiveExchangeService(ExchangeInterface):
 
             if self.is_paper_trading_activated:
                 self._enable_sandbox_mode(exchange)
+
+            self._log_operation("exchange_initialized",
+                               paper_trading=self.is_paper_trading_activated)
             return exchange
         except AttributeError:
             raise UnsupportedExchangeError(f"The exchange '{self.exchange_name}' is not supported.")
@@ -126,8 +126,15 @@ class LiveExchangeService(ExchangeInterface):
 
     async def get_balance(self) -> Dict[str, Any]:
         try:
-            balance = await self.exchange.fetch_balance()
-            return balance
+            raw_balance = await self.exchange.fetch_balance()
+
+            # Use unified data formatting
+            formatted_balance = data_formatter.format_balance_data(raw_balance, self.exchange_name)
+
+            self._log_operation("balance_fetched",
+                               currencies=len(formatted_balance['currencies']))
+
+            return formatted_balance
 
         except BaseError as e:
             raise DataFetchError(f"Error fetching balance: {str(e)}")
@@ -171,8 +178,19 @@ class LiveExchangeService(ExchangeInterface):
         )
 
         try:
-            order = await self.exchange.create_order(pair, order_type, order_side, amount, price)
-            return order
+            raw_order = await self.exchange.create_order(pair, order_type, order_side, amount, price)
+
+            # Use unified data formatting and validation
+            formatted_order = data_validator.validate_and_format_order(raw_order, self.exchange_name)
+
+            self._log_operation("order_placed",
+                               order_id=formatted_order['id'],
+                               symbol=pair,
+                               side=order_side,
+                               amount=amount,
+                               price=price)
+
+            return formatted_order
 
         except NetworkError as e:
             network_error = UnifiedNetworkError(
@@ -222,14 +240,21 @@ class LiveExchangeService(ExchangeInterface):
     ) -> dict:
         try:
             self.logger.info(f"Attempting to cancel order {order_id} for pair {pair}")
-            cancellation_result = await self.exchange.cancel_order(order_id, pair)
-            
-            if cancellation_result['status'] in ['canceled', 'closed']:
+            raw_result = await self.exchange.cancel_order(order_id, pair)
+
+            # Use unified data formatting
+            formatted_result = data_formatter.format_order_data(raw_result, self.exchange_name, validate=False)
+
+            if formatted_result['status'] in ['canceled', 'closed']:
                 self.logger.info(f"Order {order_id} successfully canceled.")
-                return cancellation_result
+                self._log_operation("order_cancelled",
+                                   order_id=order_id,
+                                   symbol=pair,
+                                   status=formatted_result['status'])
+                return formatted_result
             else:
-                self.logger.warning(f"Order {order_id} cancellation status: {cancellation_result['status']}")
-                return cancellation_result
+                self.logger.warning(f"Order {order_id} cancellation status: {formatted_result['status']}")
+                return formatted_result
 
         except OrderNotFound as e:
             raise OrderCancellationError(f"Order {order_id} not found for cancellation. It may already be completed or canceled.")

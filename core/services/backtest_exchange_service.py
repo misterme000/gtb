@@ -3,20 +3,23 @@ from typing import Optional, Dict, Any, Union
 import pandas as pd
 from config.config_manager import ConfigManager
 from utils.constants import CANDLE_LIMITS, TIMEFRAME_MAPPINGS
-from .exchange_interface import ExchangeInterface
+from .base_exchange_service import BaseExchangeService, ExchangeServiceMixin
+from .data_formatting_service import data_formatter, data_validator
 from .exceptions import UnsupportedExchangeError, DataFetchError, UnsupportedTimeframeError, HistoricalMarketDataFileNotFoundError, UnsupportedPairError
 
-class BacktestExchangeService(ExchangeInterface):
+class BacktestExchangeService(BaseExchangeService, ExchangeServiceMixin):
     def __init__(self, config_manager: ConfigManager):
-        self.logger = logging.getLogger(self.__class__.__name__)
-        self.config_manager = config_manager
-        self.historical_data_file = self.config_manager.get_historical_data_file()
-        self.exchange_name = self.config_manager.get_exchange_name()
-        self.exchange = self._initialize_exchange()
+        self.historical_data_file = config_manager.get_historical_data_file()
 
-    def _initialize_exchange(self) -> Optional[ccxt.Exchange]:
+        # Initialize base class
+        super().__init__(config_manager)
+
+    def _create_exchange_instance(self) -> ccxt.Exchange:
+        """Create exchange instance for backtesting (no API credentials needed)."""
         try:
-            return getattr(ccxt, self.exchange_name)()
+            exchange = getattr(ccxt, self.exchange_name)()
+            self._log_operation("backtest_exchange_initialized")
+            return exchange
         except AttributeError:
             raise UnsupportedExchangeError(f"The exchange '{self.exchange_name}' is not supported.")
 
@@ -94,8 +97,15 @@ class BacktestExchangeService(ExchangeInterface):
         since: int,
         until: int
     ) -> pd.DataFrame:
-        ohlcv = self._fetch_with_retry(self.exchange.fetch_ohlcv, pair, timeframe, since)
-        return self._format_ohlcv(ohlcv, until)
+        raw_ohlcv = self._fetch_with_retry(self.exchange.fetch_ohlcv, pair, timeframe, since)
+        formatted_df = data_formatter.format_ohlcv_data(raw_ohlcv, pair, timeframe, validate=True)
+
+        # Apply until timestamp filter if provided
+        if until:
+            until_dt = pd.to_datetime(until, unit='ms')
+            formatted_df = formatted_df[formatted_df.index <= until_dt]
+
+        return formatted_df
 
     def _fetch_ohlcv_in_chunks(
         self,
@@ -113,18 +123,16 @@ class BacktestExchangeService(ExchangeInterface):
             all_ohlcv.extend(ohlcv)
             since = ohlcv[-1][0] + 1
             self.logger.info(f"Fetched up to {pd.to_datetime(since, unit='ms')}")
-        return self._format_ohlcv(all_ohlcv, until)
+        formatted_df = data_formatter.format_ohlcv_data(all_ohlcv, pair, timeframe, validate=True)
 
-    def _format_ohlcv(
-        self,
-        ohlcv,
-        until: int
-    ) -> pd.DataFrame:
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df.set_index('timestamp', inplace=True)
-        until_timestamp = pd.to_datetime(until, unit='ms')
-        return df[df.index <= until_timestamp]
+        # Apply until timestamp filter if provided
+        if until:
+            until_dt = pd.to_datetime(until, unit='ms')
+            formatted_df = formatted_df[formatted_df.index <= until_dt]
+
+        return formatted_df
+
+    # Removed duplicate _format_ohlcv method - now using base class _format_ohlcv_data method
 
     def _get_candle_limit(self) -> int:
         return CANDLE_LIMITS.get(self.exchange_name, 500)  # Default to 500 if not found
@@ -132,24 +140,7 @@ class BacktestExchangeService(ExchangeInterface):
     def _get_timeframe_in_ms(self, timeframe: str) -> int:
         return TIMEFRAME_MAPPINGS.get(timeframe, 60 * 1000)  # Default to 1m if not found
 
-    def _fetch_with_retry(
-        self,
-        method,
-        *args,
-        retries=3,
-        delay=5,
-        **kwargs
-    ):
-        for attempt in range(retries):
-            try:
-                return method(*args, **kwargs)
-            except Exception as e:
-                if attempt < retries - 1:
-                    self.logger.warning(f"Attempt {attempt+1} failed. Retrying in {delay} seconds...")
-                    time.sleep(delay)
-                else:
-                    self.logger.error(f"Failed after {retries} attempts: {e}")
-                    raise DataFetchError(f"Failed to fetch data after {retries} attempts: {str(e)}")
+    # Removed duplicate _fetch_with_retry method - now using base class implementation
 
     async def place_order(
         self,

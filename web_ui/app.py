@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 from web_ui.components.layout import LayoutComponents
 from web_ui.callbacks.main_callbacks import MainCallbacks
 from web_ui.callbacks.action_callbacks import ActionCallbacks
+from web_ui.callbacks.interactive_callbacks import InteractiveCallbacks
 
 # Load environment variables
 load_dotenv()
@@ -113,8 +114,10 @@ class GridBotUI:
         # Initialize callback classes
         main_callbacks = MainCallbacks(self.app)
         action_callbacks = ActionCallbacks(self.app)
-        
+        interactive_callbacks = InteractiveCallbacks(self.app)
+
         logger.info("All callbacks initialized successfully")
+        logger.info(f"Initialized: {type(main_callbacks).__name__}, {type(action_callbacks).__name__}, {type(interactive_callbacks).__name__}")
     
     def run(self, debug=True, port=8050):
         """Run the Dash application."""

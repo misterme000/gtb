@@ -13,6 +13,7 @@ import dash
 from dash import Input, Output, State, ctx
 from web_ui.price_service import price_service
 from web_ui.components.visualizations import VisualizationComponents
+from web_ui.components.interactive_grid import interactive_grid
 from config.config_validator import ConfigValidator
 
 logger = logging.getLogger(__name__)
@@ -39,8 +40,12 @@ class MainCallbacks:
             """Update visualization based on active tab and configuration."""
             if active_tab == "grid-tab":
                 return VisualizationComponents.create_grid_visualization(config_data)
+            elif active_tab == "interactive-tab":
+                return interactive_grid.create_interactive_grid_editor(config_data)
             elif active_tab == "chart-tab":
                 return VisualizationComponents.create_price_chart(config_data, market_data)
+            elif active_tab == "realtime-tab":
+                return interactive_grid.create_real_time_price_overlay(config_data, market_data)
             elif active_tab == "backtest-tab":
                 return VisualizationComponents.create_backtest_preview(config_data)
             return "Select a tab to view visualization"
@@ -117,19 +122,19 @@ class MainCallbacks:
         )
         def update_live_price(n_intervals, base_currency, quote_currency, exchange):
             """Update live price badge with real data."""
-            if not base_currency or not quote_currency or not exchange:
-                return "Live Price: $--", "secondary"
-            
             try:
-                # Get current price using synchronous wrapper
+                if not base_currency or not quote_currency or not exchange:
+                    return "Live Price: $--", "secondary"
+
+                # Get current price using synchronous wrapper with timeout
                 price = price_service.get_current_price_sync(exchange, base_currency, quote_currency)
-                
+
                 if price:
                     pair = f"{base_currency}/{quote_currency}"
                     return f"Live Price: ${price:,.2f} ({pair})", "success"
                 else:
                     return f"Live Price: Unable to fetch", "warning"
-                    
+
             except Exception as e:
                 logger.error(f"Error fetching live price: {e}")
                 return f"Live Price: Error", "danger"

@@ -13,6 +13,7 @@ import numpy as np
 from typing import Dict, Any
 from web_ui.price_service import price_service
 from web_ui.services.backtest_service import backtest_service
+from web_ui.components.notifications import notification_system
 
 logger = logging.getLogger(__name__)
 
@@ -102,66 +103,78 @@ class VisualizationComponents:
             base_currency = config_data["pair"]["base_currency"]
             quote_currency = config_data["pair"]["quote_currency"]
             timeframe = config_data["trading_settings"]["timeframe"]
-            
-            # Fetch real historical data
-            logger.info(f"Fetching historical data for {base_currency}/{quote_currency} from {exchange_name}")
-            df = price_service.get_historical_data_sync(
-                exchange_name, base_currency, quote_currency, timeframe, limit=168  # 1 week of hourly data
-            )
-            
-            fig = go.Figure()
-            
-            if df is not None and not df.empty:
-                # Add candlestick chart
-                fig.add_trace(go.Candlestick(
-                    x=df.index,
-                    open=df['open'],
-                    high=df['high'],
-                    low=df['low'],
-                    close=df['close'],
-                    name=f'{base_currency}/{quote_currency}',
-                    increasing_line_color='green',
-                    decreasing_line_color='red'
-                ))
-                
-                # Add volume as secondary y-axis
-                fig.add_trace(go.Bar(
-                    x=df.index,
-                    y=df['volume'],
-                    name='Volume',
-                    yaxis='y2',
-                    opacity=0.3,
-                    marker_color='lightblue'
-                ))
-                
-                # Get current price for reference
-                current_price = price_service.get_current_price_sync(exchange_name, base_currency, quote_currency)
-                if current_price:
-                    fig.add_hline(
-                        y=current_price,
-                        line_color="blue",
-                        line_width=2,
-                        annotation_text=f"Current: ${current_price:,.2f}",
-                        annotation_position="top right"
-                    )
-                
-                title = f"Real-time {base_currency}/{quote_currency} Price Chart with Grid Levels"
-                
+
+            # Show loading state while fetching data
+            if not market_data or 'data' not in market_data:
+                return notification_system.create_loading_overlay(
+                    html.Div("Loading chart data...", className="text-center p-4"),
+                    is_loading=True,
+                    loading_text=f"Fetching {base_currency}/{quote_currency} data from {exchange_name}...",
+                    spinner_size="lg"
+                )
+
+            # Use market data if available, otherwise fetch
+            if 'data' in market_data and market_data['data']:
+                df = pd.DataFrame(market_data['data'])
+                if 'timestamp' in df.columns:
+                    df.set_index('timestamp', inplace=True)
+                logger.info(f"Using cached market data for {base_currency}/{quote_currency}")
             else:
-                # Fallback to sample data if real data fails
-                logger.warning("Using sample data - real data fetch failed")
-                dates = pd.date_range(start='2024-01-01', end='2024-01-07', freq='H')
-                prices = np.cumsum(np.random.normal(0, 100, len(dates))) + 95000
-                
-                fig.add_trace(go.Scatter(
-                    x=dates,
-                    y=prices,
-                    mode='lines',
-                    name='Sample Price Data',
-                    line=dict(color='orange', width=2)
-                ))
-                
-                title = f"Sample {base_currency}/{quote_currency} Price Chart (Real data unavailable)"
+                # Fetch real historical data
+                logger.info(f"Fetching historical data for {base_currency}/{quote_currency} from {exchange_name}")
+                df = price_service.get_historical_data_sync(
+                    exchange_name, base_currency, quote_currency, timeframe, limit=168  # 1 week of hourly data
+                )
+            
+            # Check if data was successfully fetched
+            if df is None or df.empty:
+                return notification_system.create_status_indicator(
+                    "warning",
+                    "No historical data available",
+                    details=[
+                        f"Pair: {base_currency}/{quote_currency}",
+                        f"Exchange: {exchange_name}",
+                        f"Timeframe: {timeframe}",
+                        "Try selecting a different pair or exchange"
+                    ]
+                )
+
+            fig = go.Figure()
+
+            # Add candlestick chart
+            fig.add_trace(go.Candlestick(
+                x=df.index,
+                open=df['open'],
+                high=df['high'],
+                low=df['low'],
+                close=df['close'],
+                name=f'{base_currency}/{quote_currency}',
+                increasing_line_color='green',
+                decreasing_line_color='red'
+            ))
+
+            # Add volume as secondary y-axis
+            fig.add_trace(go.Bar(
+                x=df.index,
+                y=df['volume'],
+                name='Volume',
+                yaxis='y2',
+                opacity=0.3,
+                marker_color='lightblue'
+            ))
+
+            # Get current price for reference
+            current_price = price_service.get_current_price_sync(exchange_name, base_currency, quote_currency)
+            if current_price:
+                fig.add_hline(
+                    y=current_price,
+                    line_color="blue",
+                    line_width=2,
+                    annotation_text=f"Current: ${current_price:,.2f}",
+                    annotation_position="top right"
+                )
+
+            title = f"Real-time {base_currency}/{quote_currency} Price Chart with Grid Levels"
             
             # Add grid levels
             grid_config = config_data["grid_strategy"]

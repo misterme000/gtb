@@ -7,6 +7,7 @@ Contains callbacks for user actions like validation, saving, and price suggestio
 import json
 import logging
 import base64
+import time
 from typing import Dict, Any
 
 import dash
@@ -14,6 +15,7 @@ from dash import Input, Output, State, ctx, dcc, html
 from web_ui.price_service import price_service
 from web_ui.validation.config_validator import UIConfigValidator
 from web_ui.utils.config_manager import ui_config_manager
+from web_ui.components.notifications import notification_system, NotificationType
 
 logger = logging.getLogger(__name__)
 
@@ -28,22 +30,37 @@ class ActionCallbacks:
     
     def setup_callbacks(self):
         """Setup all action callbacks."""
-        
+
+        # Add loading state management
         @self.app.callback(
             [Output('status-alert', 'children'),
              Output('status-alert', 'color'),
-             Output('status-alert', 'is_open')],
+             Output('status-alert', 'is_open'),
+             Output('validate-btn', 'disabled'),
+             Output('save-btn', 'disabled'),
+             Output('export-btn', 'disabled'),
+             Output('toast-container', 'children')],
             [Input('validate-btn', 'n_clicks'),
              Input('save-btn', 'n_clicks'),
              Input('export-btn', 'n_clicks')],
-            [State('config-store', 'data')]
+            [State('config-store', 'data'),
+             State('toast-container', 'children')]
         )
-        def handle_actions(validate_clicks, save_clicks, export_clicks, config_data):
-            """Handle action button clicks."""
+        def handle_actions(validate_clicks, save_clicks, export_clicks, config_data, current_toasts):
+            """Handle action button clicks with loading states and notifications."""
             if not ctx.triggered:
-                return "", "info", False
-            
+                return "", "info", False, False, False, False, current_toasts or []
+
             button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+
+            # Initialize loading state
+            loading_buttons = {
+                'validate-btn': button_id == 'validate-btn',
+                'save-btn': button_id == 'save-btn',
+                'export-btn': button_id == 'export-btn'
+            }
+
+            toasts = current_toasts or []
             
             if button_id == 'validate-btn' and validate_clicks:
                 try:
@@ -52,47 +69,139 @@ class ActionCallbacks:
                     is_valid, errors, warnings = validator.validate_config(config_data)
 
                     if is_valid:
+                        success_toast = notification_system.create_toast(
+                            "Configuration validation completed successfully!",
+                            NotificationType.SUCCESS,
+                            title="Validation Complete"
+                        )
+                        toasts.append(success_toast)
+
                         if warnings:
                             warning_text = "\n".join([f"• {w}" for w in warnings])
-                            return f"✅ Configuration is valid!\n\nWarnings:\n{warning_text}", "warning", True
+                            warning_toast = notification_system.create_toast(
+                                f"Warnings found:\n{warning_text}",
+                                NotificationType.WARNING,
+                                title="Validation Warnings",
+                                duration=8000
+                            )
+                            toasts.append(warning_toast)
+                            return f"✅ Configuration is valid!\n\nWarnings:\n{warning_text}", "warning", True, False, False, False, toasts
                         else:
-                            return "✅ Configuration is valid! No issues found.", "success", True
+                            return "✅ Configuration is valid! No issues found.", "success", True, False, False, False, toasts
                     else:
                         error_text = "\n".join([f"• {e}" for e in errors])
                         warning_text = "\n".join([f"• {w}" for w in warnings]) if warnings else ""
+
+                        error_toast = notification_system.create_toast(
+                            f"Configuration has {len(errors)} error(s)",
+                            NotificationType.ERROR,
+                            title="Validation Failed",
+                            duration=10000
+                        )
+                        toasts.append(error_toast)
 
                         message = f"❌ Configuration has errors:\n{error_text}"
                         if warning_text:
                             message += f"\n\nWarnings:\n{warning_text}"
 
-                        return message, "danger", True
+                        return message, "danger", True, False, False, False, toasts
 
                 except Exception as e:
-                    return f"❌ Validation error: {str(e)}", "danger", True
+                    error_toast = notification_system.create_toast(
+                        f"Validation failed: {str(e)}",
+                        NotificationType.ERROR,
+                        title="Validation Error"
+                    )
+                    toasts.append(error_toast)
+                    return f"❌ Validation error: {str(e)}", "danger", True, False, False, False, toasts
             
             elif button_id == 'save-btn' and save_clicks:
                 try:
+                    # Add loading toast
+                    loading_toast = notification_system.create_toast(
+                        "Saving configuration...",
+                        NotificationType.LOADING,
+                        title="Save in Progress",
+                        duration=0,
+                        dismissible=False
+                    )
+                    toasts.append(loading_toast)
+
                     # Save configuration using config manager
                     success, result = ui_config_manager.save_config(config_data)
+
+                    # Remove loading toast
+                    toasts = [t for t in toasts if t != loading_toast]
+
                     if success:
-                        return f"✅ Configuration saved to {result}", "success", True
+                        success_toast = notification_system.create_toast(
+                            f"Configuration saved successfully",
+                            NotificationType.SUCCESS,
+                            title="Save Complete"
+                        )
+                        toasts.append(success_toast)
+                        return f"✅ Configuration saved to {result}", "success", True, False, False, False, toasts
                     else:
-                        return f"❌ Save error: {result}", "danger", True
+                        error_toast = notification_system.create_toast(
+                            f"Failed to save configuration: {result}",
+                            NotificationType.ERROR,
+                            title="Save Failed"
+                        )
+                        toasts.append(error_toast)
+                        return f"❌ Save error: {result}", "danger", True, False, False, False, toasts
                 except Exception as e:
-                    return f"❌ Save error: {str(e)}", "danger", True
+                    error_toast = notification_system.create_toast(
+                        f"Save failed: {str(e)}",
+                        NotificationType.ERROR,
+                        title="Save Error"
+                    )
+                    toasts.append(error_toast)
+                    return f"❌ Save error: {str(e)}", "danger", True, False, False, False, toasts
 
             elif button_id == 'export-btn' and export_clicks:
                 try:
+                    # Add loading toast
+                    loading_toast = notification_system.create_toast(
+                        "Preparing configuration for export...",
+                        NotificationType.LOADING,
+                        title="Export in Progress",
+                        duration=0,
+                        dismissible=False
+                    )
+                    toasts.append(loading_toast)
+
                     # Export configuration for download
                     success, base64_data, filename = ui_config_manager.export_config_for_download(config_data)
+
+                    # Remove loading toast
+                    toasts = [t for t in toasts if t != loading_toast]
+
                     if success:
-                        return f"✅ Configuration ready for download as {filename}", "success", True
+                        success_toast = notification_system.create_toast(
+                            f"Configuration ready for download as {filename}",
+                            NotificationType.SUCCESS,
+                            title="Export Complete"
+                        )
+                        toasts.append(success_toast)
+                        return f"✅ Configuration ready for download as {filename}", "success", True, False, False, False, toasts
                     else:
-                        return f"❌ Export error: {base64_data}", "danger", True
+                        error_toast = notification_system.create_toast(
+                            f"Export failed: {base64_data}",
+                            NotificationType.ERROR,
+                            title="Export Failed"
+                        )
+                        toasts.append(error_toast)
+                        return f"❌ Export error: {base64_data}", "danger", True, False, False, False, toasts
                 except Exception as e:
-                    return f"❌ Export error: {str(e)}", "danger", True
-            
-            return "", "info", False
+                    error_toast = notification_system.create_toast(
+                        f"Export failed: {str(e)}",
+                        NotificationType.ERROR,
+                        title="Export Error"
+                    )
+                    toasts.append(error_toast)
+                    return f"❌ Export error: {str(e)}", "danger", True, False, False, False, toasts
+
+            return "", "info", False, False, False, False, toasts
         
         @self.app.callback(
             [Output('bottom-price-input', 'value'),

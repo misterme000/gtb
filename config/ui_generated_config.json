@@ -1,0 +1,42 @@
+{
+  "exchange": {
+    "name": "bitfinex",
+    "trading_fee": 0.005,
+    "trading_mode": "backtest"
+  },
+  "pair": {
+    "base_currency": "BTC",
+    "quote_currency": "USDT"
+  },
+  "trading_settings": {
+    "timeframe": "30m",
+    "period": {
+      "start_date": "2025-04-01T17:33:31Z",
+      "end_date": "2025-06-26T17:33:31Z"
+    },
+    "initial_balance": 10000
+  },
+  "grid_strategy": {
+    "type": "simple_grid",
+    "spacing": "arithmetic",
+    "num_grids": 10,
+    "range": {
+      "top": 100000,
+      "bottom": 90000
+    }
+  },
+  "risk_management": {
+    "take_profit": {
+      "enabled": false,
+      "threshold": 0
+    },
+    "stop_loss": {
+      "enabled": false,
+      "threshold": 0
+    }
+  },
+  "logging": {
+    "log_level": "INFO",
+    "log_to_file": false
+  }
+}

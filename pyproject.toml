@@ -16,7 +16,7 @@ dependencies = [
     "ccxt==4.4.82",
     "configparser==7.2.0",
     "psutil==7.0.0",
-    "python-dotenv==1.1.0",
+    "python-dotenv==1.1.1",
     "flask==3.0.0",
     "flask-cors==4.0.0",
     "dash==2.17.1",
